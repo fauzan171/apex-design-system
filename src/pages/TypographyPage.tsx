@@ -17,7 +17,7 @@ const typeScale = [
 
 const fontFamilies = [
   {
-    name: 'Inter',
+    name: 'Axiforma',
     usage: 'Teks utama, elemen UI',
     className: 'font-sans',
     sample: 'Pintu Baja Premium dengan kualitas terbaik untuk rumah Anda. 0123456789',
@@ -53,7 +53,7 @@ export default function TypographyPage() {
       <section>
         <h2 className="text-xl font-semibold text-slate-800 mb-4">Font Families</h2>
         <p className="text-slate-600 mb-4">
-          Font: Inter untuk teks, JetBrains Mono untuk kode dan data.
+          Font: Axiforma untuk teks, JetBrains Mono untuk kode dan data.
         </p>
         <div className="grid gap-4">
           {fontFamilies.map((font) => (
