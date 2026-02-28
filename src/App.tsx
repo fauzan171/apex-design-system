@@ -46,6 +46,7 @@ import BorderRadiusPage from "./pages/BorderRadiusPage";
 import ElevationGridPage from "./pages/ElevationGridPage";
 
 // Component Pages
+import IconographyPage from "./pages/IconographyPage";
 import ButtonsPage from "./pages/ButtonsPage";
 import FormsPage from "./pages/FormsPage";
 import CardsPage from "./pages/CardsPage";
@@ -78,6 +79,7 @@ import DeliveryModulePage from "./pages/modules/DeliveryModulePage";
 
 type SectionType =
   | "introduction"
+  | "iconography"
   | "typography"
   | "colors"
   | "spacing"
@@ -112,37 +114,41 @@ const introSections = [
     id: "introduction" as SectionType,
     label: "Overview & Principles",
     icon: BookOpen,
+    color: "text-blue-600",
   },
 ];
 
 const foundations = [
-  { id: "colors" as SectionType, label: "Colors", icon: Palette },
-  { id: "typography" as SectionType, label: "Typography", icon: Type },
-  { id: "spacing" as SectionType, label: "Spacing", icon: Space },
-  { id: "border-radius" as SectionType, label: "Border Radius", icon: Circle },
+  { id: "colors" as SectionType, label: "Colors", icon: Palette, color: "text-rose-500" },
+  { id: "typography" as SectionType, label: "Typography", icon: Type, color: "text-orange-500" },
+  { id: "spacing" as SectionType, label: "Spacing", icon: Space, color: "text-amber-500" },
+  { id: "border-radius" as SectionType, label: "Border Radius", icon: Circle, color: "text-emerald-500" },
   {
     id: "elevation-grid" as SectionType,
     label: "Elevation & Grid",
     icon: Grid,
+    color: "text-lime-500",
   },
 ];
 
 const components = [
-  { id: "buttons" as SectionType, label: "Buttons", icon: ToggleLeft },
-  { id: "forms" as SectionType, label: "Input & Form", icon: FileText },
-  { id: "tables" as SectionType, label: "Table", icon: List },
-  { id: "modal" as SectionType, label: "Modal", icon: AppWindow },
-  { id: "alert" as SectionType, label: "Alert", icon: AlertCircle },
-  { id: "badge" as SectionType, label: "Badge", icon: Tag },
-  { id: "cards" as SectionType, label: "Card", icon: Square },
-  { id: "tabs" as SectionType, label: "Tabs", icon: Layers },
+  { id: "iconography" as SectionType, label: "Iconography", icon: Palette, color: "text-fuchsia-600" },
+  { id: "buttons" as SectionType, label: "Buttons", icon: ToggleLeft, color: "text-blue-500" },
+  { id: "forms" as SectionType, label: "Input & Form", icon: FileText, color: "text-indigo-500" },
+  { id: "tables" as SectionType, label: "Table", icon: List, color: "text-violet-500" },
+  { id: "modal" as SectionType, label: "Modal", icon: AppWindow, color: "text-purple-500" },
+  { id: "alert" as SectionType, label: "Alert", icon: AlertCircle, color: "text-rose-500" },
+  { id: "badge" as SectionType, label: "Badge", icon: Tag, color: "text-pink-500" },
+  { id: "cards" as SectionType, label: "Card", icon: Square, color: "text-fuchsia-600" },
+  { id: "tabs" as SectionType, label: "Tabs", icon: Layers, color: "text-cyan-500" },
   {
     id: "pagination" as SectionType,
     label: "Pagination",
     icon: MoreHorizontal,
+    color: "text-sky-500",
   },
-  { id: "tooltip" as SectionType, label: "Tooltip", icon: MessageSquare },
-  { id: "navigation" as SectionType, label: "Navigation", icon: PanelLeft },
+  { id: "tooltip" as SectionType, label: "Tooltip", icon: MessageSquare, color: "text-blue-400" },
+  { id: "navigation" as SectionType, label: "Navigation", icon: PanelLeft, color: "text-slate-500" },
 ];
 
 const patterns = [
@@ -150,13 +156,15 @@ const patterns = [
     id: "error-state" as SectionType,
     label: "Error State",
     icon: AlertTriangle,
+    color: "text-red-600",
   },
-  { id: "loading-state" as SectionType, label: "Loading State", icon: Loader2 },
-  { id: "empty-state" as SectionType, label: "Empty State", icon: Inbox },
+  { id: "loading-state" as SectionType, label: "Loading State", icon: Loader2, color: "text-blue-500" },
+  { id: "empty-state" as SectionType, label: "Empty State", icon: Inbox, color: "text-slate-400" },
   {
     id: "responsive" as SectionType,
     label: "Responsive Behavior",
     icon: Smartphone,
+    color: "text-teal-500",
   },
 ];
 
@@ -165,11 +173,12 @@ const dataViz = [
     id: "data-viz" as SectionType,
     label: "Data Visualization",
     icon: PieChart,
+    color: "text-emerald-600",
   },
 ];
 
 const tokens = [
-  { id: "tokens" as SectionType, label: "Design Tokens", icon: Code },
+  { id: "tokens" as SectionType, label: "Design Tokens", icon: Code, color: "text-yellow-600" },
 ];
 
 const erpModules = [
@@ -177,31 +186,36 @@ const erpModules = [
     id: "dashboard-module" as SectionType,
     label: "Dashboard",
     icon: LayoutDashboard,
+    color: "text-blue-600",
   },
   {
     id: "planning-module" as SectionType,
     label: "Planning",
     icon: ClipboardList,
+    color: "text-orange-500",
   },
   {
     id: "purchasing-module" as SectionType,
     label: "Purchasing",
     icon: ShoppingCart,
+    color: "text-amber-500",
   },
   {
     id: "warehousing-module" as SectionType,
     label: "Warehousing",
     icon: Warehouse,
+    color: "text-green-600",
   },
   {
     id: "production-module" as SectionType,
     label: "Production",
     icon: Factory,
+    color: "text-slate-700",
   },
-  { id: "delivery-module" as SectionType, label: "Delivery", icon: Truck },
+  { id: "delivery-module" as SectionType, label: "Delivery", icon: Truck, color: "text-sky-600" },
 ];
 
-const NavGroup = ({ title, items, activeSection, onNavigate }: { title: string; items: { id: SectionType; label: string; icon: React.ElementType }[]; activeSection: SectionType; onNavigate: (id: SectionType) => void }) => (
+const NavGroup = ({ title, items, activeSection, onNavigate }: { title: string; items: { id: SectionType; label: string; icon: React.ElementType; color?: string }[]; activeSection: SectionType; onNavigate: (id: SectionType) => void }) => (
   <div className="mb-4">
     <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
       {title}
@@ -219,7 +233,7 @@ const NavGroup = ({ title, items, activeSection, onNavigate }: { title: string; 
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-800",
           )}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className={cn("h-5 w-5", activeSection === section.id ? "" : section.color)} />
           {section.label}
         </button>
       );
@@ -238,10 +252,10 @@ function App() {
       case "introduction":
         return <IntroductionPage />;
       // Foundations
-      case "typography":
-        return <TypographyPage />;
       case "colors":
         return <ColorsPage />;
+      case "typography":
+        return <TypographyPage />;
       case "spacing":
         return <SpacingPage />;
       case "border-radius":
@@ -249,6 +263,8 @@ function App() {
       case "elevation-grid":
         return <ElevationGridPage />;
       // Components
+      case "iconography":
+        return <IconographyPage />;
       case "buttons":
         return <ButtonsPage />;
       case "forms":
