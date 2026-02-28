@@ -1,9 +1,3 @@
-name = "apex-erp-dashboard"
+name = "apex-design-system"
 compatibility_date = "2025-02-28"
 pages_build_output_dir = "dist"
-
-[build]
-command = "npm run build"
-
-[build.upload]
-format = "service-worker"
