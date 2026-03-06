@@ -1,0 +1,956 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Package,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  FileText,
+  Send,
+  ThumbsUp,
+  ThumbsDown,
+  X,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  ShoppingCart,
+  Hammer,
+  Check,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { planningService } from "@/data/mockPlanningData";
+import type { ProductionPlan, MRItem } from "@/types/planning";
+import {
+  ProductionPlanStatus,
+  MRItemStatus,
+  productionPlanStatusColors,
+} from "@/types/planning";
+import { cn } from "@/lib/utils";
+
+export function PlanningDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [plan, setPlan] = useState<ProductionPlan | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // PR Dialog state
+  const [showPRDialog, setShowPRDialog] = useState(false);
+  const [selectedMRItems, setSelectedMRItems] = useState<MRItem[]>([]);
+  const [prRequiredDate, setPRRequiredDate] = useState("");
+  const [prNotes, setPRNotes] = useState("");
+  const [prLoading, setPRLoading] = useState(false);
+  const [currentPlanItemForPR, setCurrentPlanItemForPR] = useState<string>("");
+
+  // WO state
+  const [woLoading, setWOLoading] = useState<string | null>(null); // plan item id
+
+  useEffect(() => {
+    loadPlan();
+  }, [id]);
+
+  const loadPlan = async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const data = await planningService.getPlanById(id);
+      setPlan(data);
+    } catch (error) {
+      console.error("Failed to load plan:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleItem = (itemId: string) => {
+    const newExpanded = new Set(expandedItems);
+    if (newExpanded.has(itemId)) {
+      newExpanded.delete(itemId);
+    } else {
+      newExpanded.add(itemId);
+    }
+    setExpandedItems(newExpanded);
+  };
+
+  const handleApprove = async () => {
+    if (!plan) return;
+    setActionLoading(true);
+    try {
+      await planningService.approvePlan(plan.id);
+      loadPlan();
+    } catch (error) {
+      console.error("Failed to approve plan:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!plan || !rejectReason.trim()) return;
+    setActionLoading(true);
+    try {
+      await planningService.rejectPlan(plan.id, rejectReason);
+      setShowRejectDialog(false);
+      setRejectReason("");
+      loadPlan();
+    } catch (error) {
+      console.error("Failed to reject plan:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!plan || !cancelReason.trim()) return;
+    setActionLoading(true);
+    try {
+      await planningService.cancelPlan(plan.id, cancelReason);
+      setShowCancelDialog(false);
+      setCancelReason("");
+      loadPlan();
+    } catch (error) {
+      console.error("Failed to cancel plan:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Open PR dialog for a plan item
+  const openPRDialog = (planItemId: string) => {
+    const planItem = plan?.items.find((item) => item.id === planItemId);
+    if (!planItem) return;
+
+    // Get MR items with shortage and not yet converted to PR
+    const itemsWithShortage = planItem.mrItems.filter(
+      (mr) => mr.shortageQty > 0 && !mr.prId
+    );
+    setSelectedMRItems(itemsWithShortage);
+    setCurrentPlanItemForPR(planItemId);
+    setPRRequiredDate(plan?.targetCompletionDate || "");
+    setPRNotes("");
+    setShowPRDialog(true);
+  };
+
+  // Toggle MR item selection
+  const toggleMRItem = (mrItem: MRItem) => {
+    setSelectedMRItems((prev) => {
+      const isSelected = prev.some((item) => item.id === mrItem.id);
+      if (isSelected) {
+        return prev.filter((item) => item.id !== mrItem.id);
+      } else {
+        return [...prev, mrItem];
+      }
+    });
+  };
+
+  // Create PR from selected MR items
+  const handleCreatePR = async () => {
+    if (!plan || selectedMRItems.length === 0 || !prRequiredDate) return;
+    setPRLoading(true);
+    try {
+      await planningService.createPRFromMR({
+        planId: plan.id,
+        planNumber: plan.planNumber,
+        items: selectedMRItems.map((mr) => ({
+          materialId: mr.materialId,
+          materialCode: mr.materialCode,
+          materialName: mr.materialName,
+          quantity: mr.shortageQty,
+          unit: mr.unit,
+        })),
+        requiredDate: prRequiredDate,
+        notes: prNotes,
+      });
+      setShowPRDialog(false);
+      setSelectedMRItems([]);
+      loadPlan();
+    } catch (error) {
+      console.error("Failed to create PR:", error);
+    } finally {
+      setPRLoading(false);
+    }
+  };
+
+  // Create Work Order
+  const handleCreateWO = async (planItemId: string) => {
+    if (!plan) return;
+    const planItem = plan.items.find((item) => item.id === planItemId);
+    if (!planItem) return;
+
+    setWOLoading(planItemId);
+    try {
+      await planningService.createWO({
+        planId: plan.id,
+        planNumber: plan.planNumber,
+        planItemId: planItem.id,
+        productId: planItem.productId,
+        productCode: planItem.productCode,
+        productName: planItem.productName,
+        quantity: planItem.quantity,
+        unit: planItem.unit,
+      });
+      loadPlan();
+    } catch (error) {
+      console.error("Failed to create WO:", error);
+    } finally {
+      setWOLoading(null);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getStatusIcon = (status: ProductionPlanStatus) => {
+    switch (status) {
+      case ProductionPlanStatus.DRAFT:
+        return <Clock className="h-4 w-4" />;
+      case ProductionPlanStatus.PENDING_APPROVAL:
+        return <AlertCircle className="h-4 w-4" />;
+      case ProductionPlanStatus.APPROVED:
+        return <CheckCircle2 className="h-4 w-4" />;
+      case ProductionPlanStatus.IN_PROGRESS:
+        return <Loader2 className="h-4 w-4 animate-spin" />;
+      case ProductionPlanStatus.COMPLETED:
+        return <CheckCircle2 className="h-4 w-4" />;
+      case ProductionPlanStatus.CANCELLED:
+        return <XCircle className="h-4 w-4" />;
+      default:
+        return null;
+    }
+  };
+
+  const getMRStatusBadge = (status: string) => {
+    switch (status) {
+      case "Fulfilled":
+        return (
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            Fulfilled
+          </Badge>
+        );
+      case "Partial Fulfilled":
+        return (
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+            Partial
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+            Pending
+          </Badge>
+        );
+    }
+  };
+
+  const getWOStatusBadge = (status: string) => {
+    switch (status) {
+      case "In Progress":
+        return (
+          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+            In Progress
+          </Badge>
+        );
+      case "Completed":
+        return (
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            Completed
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
+            Not Started
+          </Badge>
+        );
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (!plan) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 text-slate-500">
+        <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+        <p className="font-medium">Production Plan not found</p>
+        <Button variant="link" onClick={() => navigate("/planning")}>
+          Back to Planning List
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/planning")}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-900">{plan.planNumber}</h1>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "gap-1.5 font-medium",
+                  productionPlanStatusColors[plan.status].bg,
+                  productionPlanStatusColors[plan.status].text,
+                  productionPlanStatusColors[plan.status].border
+                )}
+              >
+                {getStatusIcon(plan.status)}
+                {plan.status}
+              </Badge>
+            </div>
+            <p className="text-sm text-slate-500 mt-1">
+              HO Order Reference: {plan.hoOrderReference}
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-2">
+          {plan.status === ProductionPlanStatus.DRAFT && (
+            <>
+              <Button variant="outline" onClick={() => navigate(`/planning/${plan.id}/edit`)}>
+                Edit Plan
+              </Button>
+              <Button
+                onClick={async () => {
+                  setActionLoading(true);
+                  await planningService.submitPlan(plan.id);
+                  loadPlan();
+                  setActionLoading(false);
+                }}
+                disabled={actionLoading || plan.items.length === 0}
+                className="gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Submit for Approval
+              </Button>
+            </>
+          )}
+
+          {plan.status === ProductionPlanStatus.PENDING_APPROVAL && (
+            <>
+              <Button
+                variant="outline"
+                className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={() => setShowRejectDialog(true)}
+              >
+                <ThumbsDown className="h-4 w-4" />
+                Reject
+              </Button>
+              <Button onClick={handleApprove} disabled={actionLoading} className="gap-2">
+                <ThumbsUp className="h-4 w-4" />
+                Approve
+              </Button>
+            </>
+          )}
+
+          {plan.status !== ProductionPlanStatus.CANCELLED &&
+            plan.status !== ProductionPlanStatus.COMPLETED && (
+              <Button
+                variant="ghost"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={() => setShowCancelDialog(true)}
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancel Plan
+              </Button>
+            )}
+        </div>
+      </div>
+
+      {/* Plan Info Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100">
+                <Calendar className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Plan Date</p>
+                <p className="font-medium text-slate-900">{formatDate(plan.planDate)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-100">
+                <Clock className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Target Completion</p>
+                <p className="font-medium text-slate-900">
+                  {formatDate(plan.targetCompletionDate)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-100">
+                <Package className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Products</p>
+                <p className="font-medium text-slate-900">{plan.items.length} items</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Notes */}
+      {plan.notes && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Notes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-slate-600">{plan.notes}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cancel Reason */}
+      {plan.status === ProductionPlanStatus.CANCELLED && plan.cancelReason && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <XCircle className="h-5 w-5 text-red-600 mt-0.5" />
+              <div>
+                <p className="font-medium text-red-800">Cancellation Reason</p>
+                <p className="text-red-700 text-sm mt-1">{plan.cancelReason}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Production Plan Items */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Plan Items</span>
+            {plan.status === ProductionPlanStatus.DRAFT && (
+              <Button variant="outline" size="sm" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add Product
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {plan.items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+              <Package className="h-12 w-12 text-slate-300 mb-4" />
+              <p className="font-medium">No products added yet</p>
+              <p className="text-sm">Add products to create Material Requirements</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200">
+              {plan.items.map((item) => (
+                <div key={item.id} className="p-4">
+                  {/* Item Header */}
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => toggleItem(item.id)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                        {expandedItems.has(item.id) ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900">
+                            {item.productCode}
+                          </span>
+                          <span className="text-slate-500">-</span>
+                          <span className="text-slate-700">{item.productName}</span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
+                          <span>Qty: {item.quantity} {item.unit}</span>
+                          <span className="text-slate-300">|</span>
+                          {getMRStatusBadge(item.mrStatus)}
+                          <span className="text-slate-300">|</span>
+                          {getWOStatusBadge(item.woStatus)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm text-slate-500">MR Progress</p>
+                        <div className="flex items-center gap-2">
+                          <Progress value={item.mrProgress} className="w-24 h-2" />
+                          <span className="text-sm font-medium">{item.mrProgress}%</span>
+                        </div>
+                      </div>
+                      {item.criticalMrFulfilled ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-green-50 text-green-700 border-green-200"
+                        >
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          WO Ready
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-50 text-amber-700 border-amber-200"
+                        >
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Critical Pending
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded MR Items */}
+                  {expandedItems.has(item.id) && item.mrItems.length > 0 && (
+                    <div className="mt-4 ml-10 border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead>Material</TableHead>
+                            <TableHead className="text-right">Required</TableHead>
+                            <TableHead className="text-right">Available</TableHead>
+                            <TableHead className="text-right">Shortage</TableHead>
+                            <TableHead className="text-center">Priority</TableHead>
+                            <TableHead className="text-center">Status</TableHead>
+                            <TableHead className="text-center">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {item.mrItems
+                            .sort((a, b) => b.priorityWeight - a.priorityWeight)
+                            .map((mrItem) => (
+                              <TableRow
+                                key={mrItem.id}
+                                className={cn(
+                                  mrItem.isCritical && "bg-amber-50/50"
+                                )}
+                              >
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <div>
+                                      <p className="font-medium">{mrItem.materialCode}</p>
+                                      <p className="text-xs text-slate-500">
+                                        {mrItem.materialName}
+                                      </p>
+                                    </div>
+                                    {mrItem.isCritical && (
+                                      <Badge
+                                        variant="outline"
+                                        className="bg-red-100 text-red-700 border-red-200 text-xs"
+                                      >
+                                        Critical
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {mrItem.requiredQty.toLocaleString()} {mrItem.unit}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {mrItem.availableQty.toLocaleString()} {mrItem.unit}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {mrItem.shortageQty > 0 ? (
+                                    <span className="text-red-600 font-medium">
+                                      -{mrItem.shortageQty.toLocaleString()} {mrItem.unit}
+                                    </span>
+                                  ) : (
+                                    <span className="text-green-600">-</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="outline">{mrItem.priorityWeight}%</Badge>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {mrItem.status === MRItemStatus.FULFILLED ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-green-50 text-green-700 border-green-200"
+                                    >
+                                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                                      Fulfilled
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-slate-50 text-slate-600 border-slate-200"
+                                    >
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      Pending
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {mrItem.shortageQty > 0 && !mrItem.prId && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="gap-1"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openPRDialog(item.id);
+                                      }}
+                                    >
+                                      <ShoppingCart className="h-3 w-3" />
+                                      Create PR
+                                    </Button>
+                                  )}
+                                  {mrItem.prId && (
+                                    <span className="text-xs text-slate-500">
+                                      PR: {mrItem.prId}
+                                    </span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                      {item.criticalMrFulfilled && item.woStatus === "Not Started" && (
+                        <div className="p-3 bg-green-50 border-t flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-green-700">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span className="text-sm">
+                              Critical materials fulfilled. Ready to create Work Order.
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => handleCreateWO(item.id)}
+                            disabled={woLoading === item.id}
+                          >
+                            {woLoading === item.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Hammer className="h-4 w-4" />
+                            )}
+                            Create WO
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Approval History */}
+      {plan.approvalLogs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Approval History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {plan.approvalLogs.map((log, index) => (
+                <div
+                  key={log.id}
+                  className="flex items-start gap-3 text-sm"
+                >
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={cn(
+                        "w-2 h-2 rounded-full",
+                        log.action === "Approve"
+                          ? "bg-green-500"
+                          : log.action === "Reject" || log.action === "Cancel"
+                          ? "bg-red-500"
+                          : "bg-blue-500"
+                      )}
+                    />
+                    {index < plan.approvalLogs.length - 1 && (
+                      <div className="w-px h-6 bg-slate-200" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-900">{log.action}</span>
+                      <span className="text-slate-400">by</span>
+                      <span className="text-slate-700">{log.userName}</span>
+                    </div>
+                    <p className="text-slate-500 text-xs mt-0.5">
+                      {formatDateTime(log.timestamp)}
+                    </p>
+                    {log.notes && (
+                      <p className="text-slate-600 mt-1 italic">"{log.notes}"</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Reject Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Production Plan</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this plan.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Enter rejection reason..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={!rejectReason.trim() || actionLoading}
+            >
+              Reject Plan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Production Plan</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for cancelling this plan. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Enter cancellation reason..."
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
+              Back
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancel}
+              disabled={!cancelReason.trim() || actionLoading}
+            >
+              Cancel Plan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create PR Dialog */}
+      <Dialog open={showPRDialog} onOpenChange={setShowPRDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              Create Purchase Request
+            </DialogTitle>
+            <DialogDescription>
+              Select materials with shortage to create a Purchase Request.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* MR Items Selection */}
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead className="w-12"></TableHead>
+                    <TableHead>Material</TableHead>
+                    <TableHead className="text-right">Shortage</TableHead>
+                    <TableHead className="text-center">Priority</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {plan?.items
+                    .find((item) => item.id === currentPlanItemForPR)
+                    ?.mrItems.filter((mr) => mr.shortageQty > 0 && !mr.prId)
+                    .sort((a, b) => b.priorityWeight - a.priorityWeight)
+                    .map((mrItem) => (
+                      <TableRow
+                        key={mrItem.id}
+                        className={cn(
+                          "cursor-pointer",
+                          selectedMRItems.some((m) => m.id === mrItem.id) &&
+                            "bg-blue-50"
+                        )}
+                        onClick={() => toggleMRItem(mrItem)}
+                      >
+                        <TableCell>
+                          <div
+                            className={cn(
+                              "w-4 h-4 border rounded flex items-center justify-center cursor-pointer",
+                              selectedMRItems.some((m) => m.id === mrItem.id)
+                                ? "bg-blue-600 border-blue-600"
+                                : "border-slate-300"
+                            )}
+                          >
+                            {selectedMRItems.some((m) => m.id === mrItem.id) && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <p className="font-medium">{mrItem.materialCode}</p>
+                              <p className="text-xs text-slate-500">
+                                {mrItem.materialName}
+                              </p>
+                            </div>
+                            {mrItem.isCritical && (
+                              <Badge
+                                variant="outline"
+                                className="bg-red-100 text-red-700 border-red-200 text-xs"
+                              >
+                                Critical
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-red-600 font-medium">
+                          {mrItem.shortageQty.toLocaleString()} {mrItem.unit}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline">{mrItem.priorityWeight}%</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* PR Details */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="requiredDate">Required Date</Label>
+                <Input
+                  id="requiredDate"
+                  type="date"
+                  value={prRequiredDate}
+                  onChange={(e) => setPRRequiredDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Selected Items</Label>
+                <div className="flex items-center h-10 px-3 bg-slate-50 rounded-md text-sm">
+                  {selectedMRItems.length} materials selected
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="prNotes">Notes (Optional)</Label>
+              <Textarea
+                id="prNotes"
+                placeholder="Enter notes..."
+                value={prNotes}
+                onChange={(e) => setPRNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPRDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreatePR}
+              disabled={selectedMRItems.length === 0 || !prRequiredDate || prLoading}
+            >
+              {prLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <ShoppingCart className="h-4 w-4 mr-2" />
+              )}
+              Create PR
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
