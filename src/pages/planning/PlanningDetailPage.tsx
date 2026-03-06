@@ -26,6 +26,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Edit3,
+  CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +88,16 @@ export function PlanningDetailPage() {
   const [mrFilter, setMRFilter] = useState<"all" | "shortage" | "no-shortage">("all");
   const [mrSortBy, setMRSortBy] = useState<"priority" | "material" | "shortage">("priority");
   const [mrSortOrder, setMRSortOrder] = useState<"asc" | "desc">("desc");
+
+  // P1 Feature states
+  const [showRequestEditDialog, setShowRequestEditDialog] = useState(false);
+  const [requestEditReason, setRequestEditReason] = useState("");
+  const [showWOWarningDialog, setShowWOWarningDialog] = useState(false);
+  const [pendingWOPlanItemId, setPendingWOPlanItemId] = useState<string | null>(null);
+  const [mrPriorityFilter, setMRPriorityFilter] = useState<"all" | "critical" | "high" | "normal">("all");
+
+  // PR quantity editing state
+  const [prItemQuantities, setPRItemQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadPlan();
@@ -197,7 +209,7 @@ export function PlanningDetailPage() {
           materialId: mr.materialId,
           materialCode: mr.materialCode,
           materialName: mr.materialName,
-          quantity: mr.shortageQty,
+          quantity: getPRItemQuantity(mr),
           unit: mr.unit,
         })),
         requiredDate: prRequiredDate,
@@ -205,37 +217,12 @@ export function PlanningDetailPage() {
       });
       setShowPRDialog(false);
       setSelectedMRItems([]);
+      setPRItemQuantities({});
       loadPlan();
     } catch (error) {
       console.error("Failed to create PR:", error);
     } finally {
       setPRLoading(false);
-    }
-  };
-
-  // Create Work Order
-  const handleCreateWO = async (planItemId: string) => {
-    if (!plan) return;
-    const planItem = plan.items.find((item) => item.id === planItemId);
-    if (!planItem) return;
-
-    setWOLoading(planItemId);
-    try {
-      await planningService.createWO({
-        planId: plan.id,
-        planNumber: plan.planNumber,
-        planItemId: planItem.id,
-        productId: planItem.productId,
-        productCode: planItem.productCode,
-        productName: planItem.productName,
-        quantity: planItem.quantity,
-        unit: planItem.unit,
-      });
-      loadPlan();
-    } catch (error) {
-      console.error("Failed to create WO:", error);
-    } finally {
-      setWOLoading(null);
     }
   };
 
@@ -295,6 +282,119 @@ export function PlanningDetailPage() {
   // Deselect all
   const handleDeselectAll = () => {
     setSelectedMRItems([]);
+    setPRItemQuantities({});
+  };
+
+  // P1: Request Edit for Approved Plan
+  const handleRequestEdit = async () => {
+    if (!plan || !requestEditReason.trim()) return;
+    setActionLoading(true);
+    try {
+      await planningService.requestEdit(plan.id, requestEditReason);
+      setShowRequestEditDialog(false);
+      setRequestEditReason("");
+      navigate(`/planning/${plan.id}/edit`);
+    } catch (error) {
+      console.error("Failed to request edit:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // P1: Mark Plan as Completed
+  const handleMarkCompleted = async () => {
+    if (!plan) return;
+    setActionLoading(true);
+    try {
+      await planningService.updatePlanStatus(plan.id, ProductionPlanStatus.COMPLETED);
+      loadPlan();
+    } catch (error) {
+      console.error("Failed to mark as completed:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // P1: Create WO with warning check
+  const handleCreateWOWithCheck = async (planItemId: string) => {
+    if (!plan) return;
+    const planItem = plan.items.find((item) => item.id === planItemId);
+    if (!planItem) return;
+
+    // Check for non-critical shortage
+    const nonCriticalShortage = planItem.mrItems.filter(
+      (mr) => !mr.isCritical && mr.shortageQty > 0
+    );
+
+    if (nonCriticalShortage.length > 0) {
+      // Show warning dialog
+      setPendingWOPlanItemId(planItemId);
+      setShowWOWarningDialog(true);
+    } else {
+      // Proceed directly
+      await executeCreateWO(planItemId);
+    }
+  };
+
+  // Execute WO creation
+  const executeCreateWO = async (planItemId: string) => {
+    if (!plan) return;
+    const planItem = plan.items.find((item) => item.id === planItemId);
+    if (!planItem) return;
+
+    setWOLoading(planItemId);
+    try {
+      await planningService.createWO({
+        planId: plan.id,
+        planNumber: plan.planNumber,
+        planItemId: planItem.id,
+        productId: planItem.productId,
+        productCode: planItem.productCode,
+        productName: planItem.productName,
+        quantity: planItem.quantity,
+        unit: planItem.unit,
+      });
+
+      // P1: Auto update status to In Progress if this is the first WO
+      if (plan.status === ProductionPlanStatus.APPROVED) {
+        await planningService.updatePlanStatus(plan.id, ProductionPlanStatus.IN_PROGRESS);
+      }
+
+      setShowWOWarningDialog(false);
+      setPendingWOPlanItemId(null);
+      loadPlan();
+    } catch (error) {
+      console.error("Failed to create WO:", error);
+    } finally {
+      setWOLoading(null);
+    }
+  };
+
+  // P1: Filter MR items by priority level
+  const filterMRByPriority = (items: MRItem[]) => {
+    switch (mrPriorityFilter) {
+      case "critical":
+        return items.filter((mr) => mr.isCritical);
+      case "high":
+        return items.filter((mr) => mr.priorityWeight >= 40 && !mr.isCritical);
+      case "normal":
+        return items.filter((mr) => mr.priorityWeight < 40);
+      default:
+        return items;
+    }
+  };
+
+  // P1: Update PR item quantity
+  const updatePRItemQuantity = (mrItemId: string, quantity: number) => {
+    setPRItemQuantities((prev) => ({
+      ...prev,
+      [mrItemId]: quantity,
+    }));
+  };
+
+  // Get PR item quantity (use shortage qty as default)
+  const getPRItemQuantity = (mrItem: MRItem): number => {
+    return prItemQuantities[mrItem.id] ?? mrItem.shortageQty;
   };
 
   // Export MR to CSV
@@ -632,6 +732,31 @@ export function PlanningDetailPage() {
             </>
           )}
 
+          {/* P1: Request Edit for Approved Plan */}
+          {plan.status === ProductionPlanStatus.APPROVED && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setShowRequestEditDialog(true)}
+            >
+              <Edit3 className="h-4 w-4" />
+              Request Edit
+            </Button>
+          )}
+
+          {/* P1: Mark as Completed for In Progress Plan */}
+          {plan.status === ProductionPlanStatus.IN_PROGRESS && (
+            <Button
+              variant="outline"
+              className="gap-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+              onClick={handleMarkCompleted}
+              disabled={actionLoading}
+            >
+              <CheckCircle className="h-4 w-4" />
+              Mark Completed
+            </Button>
+          )}
+
           {plan.status !== ProductionPlanStatus.CANCELLED &&
             plan.status !== ProductionPlanStatus.COMPLETED && (
               <Button
@@ -832,38 +957,77 @@ export function PlanningDetailPage() {
                     <div className="mt-4 ml-10 border rounded-lg overflow-hidden">
                       {/* Filter & Sort Controls */}
                       <div className="flex items-center justify-between p-3 bg-slate-50 border-b">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-500">Filter:</span>
-                          <div className="flex gap-1">
-                            <Button
-                              variant={mrFilter === "all" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => setMRFilter("all")}
-                            >
-                              All
-                            </Button>
-                            <Button
-                              variant={mrFilter === "shortage" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => setMRFilter("shortage")}
-                            >
-                              Shortage
-                            </Button>
-                            <Button
-                              variant={mrFilter === "no-shortage" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => setMRFilter("no-shortage")}
-                            >
-                              No Shortage
-                            </Button>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-500">Status:</span>
+                            <div className="flex gap-1">
+                              <Button
+                                variant={mrFilter === "all" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setMRFilter("all")}
+                              >
+                                All
+                              </Button>
+                              <Button
+                                variant={mrFilter === "shortage" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setMRFilter("shortage")}
+                              >
+                                Shortage
+                              </Button>
+                              <Button
+                                variant={mrFilter === "no-shortage" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setMRFilter("no-shortage")}
+                              >
+                                No Shortage
+                              </Button>
+                            </div>
+                          </div>
+                          {/* P1: Priority Level Filter */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-500">Priority:</span>
+                            <div className="flex gap-1">
+                              <Button
+                                variant={mrPriorityFilter === "all" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setMRPriorityFilter("all")}
+                              >
+                                All
+                              </Button>
+                              <Button
+                                variant={mrPriorityFilter === "critical" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                                onClick={() => setMRPriorityFilter("critical")}
+                              >
+                                Critical
+                              </Button>
+                              <Button
+                                variant={mrPriorityFilter === "high" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setMRPriorityFilter("high")}
+                              >
+                                High
+                              </Button>
+                              <Button
+                                variant={mrPriorityFilter === "normal" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setMRPriorityFilter("normal")}
+                              >
+                                Normal
+                              </Button>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-slate-500">
-                          {filterMRItems(item.mrItems).length} items
-                          {mrFilter === "shortage" && ` (${filterMRItems(item.mrItems).filter(m => m.shortageQty > 0).length} with shortage)`}
+                          {filterMRByPriority(filterMRItems(item.mrItems)).length} items
                         </div>
                       </div>
                       <Table>
@@ -912,7 +1076,7 @@ export function PlanningDetailPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {sortMRItems(filterMRItems(item.mrItems))
+                          {sortMRItems(filterMRByPriority(filterMRItems(item.mrItems)))
                             .map((mrItem) => (
                               <TableRow
                                 key={mrItem.id}
@@ -1011,7 +1175,7 @@ export function PlanningDetailPage() {
                           <Button
                             size="sm"
                             className="gap-2"
-                            onClick={() => handleCreateWO(item.id)}
+                            onClick={() => handleCreateWOWithCheck(item.id)}
                             disabled={woLoading === item.id}
                           >
                             {woLoading === item.id ? (
@@ -1185,6 +1349,7 @@ export function PlanningDetailPage() {
                     <TableHead className="w-12"></TableHead>
                     <TableHead>Material</TableHead>
                     <TableHead className="text-right">Shortage</TableHead>
+                    <TableHead className="text-center w-28">PR Qty</TableHead>
                     <TableHead className="text-center">Priority</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1237,6 +1402,16 @@ export function PlanningDetailPage() {
                         </TableCell>
                         <TableCell className="text-right text-red-600 font-medium">
                           {mrItem.shortageQty.toLocaleString()} {mrItem.unit}
+                        </TableCell>
+                        <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={mrItem.shortageQty}
+                            value={getPRItemQuantity(mrItem)}
+                            onChange={(e) => updatePRItemQuantity(mrItem.id, parseInt(e.target.value) || mrItem.shortageQty)}
+                            className="w-20 h-8 text-center"
+                          />
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant="outline">{mrItem.priorityWeight}%</Badge>
@@ -1292,6 +1467,92 @@ export function PlanningDetailPage() {
                 <ShoppingCart className="h-4 w-4 mr-2" />
               )}
               Create PR
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Edit Dialog */}
+      <Dialog open={showRequestEditDialog} onOpenChange={setShowRequestEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Edit</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for requesting to edit this approved plan.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Enter reason for edit request..."
+            value={requestEditReason}
+            onChange={(e) => setRequestEditReason(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRequestEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRequestEdit}
+              disabled={!requestEditReason.trim() || actionLoading}
+            >
+              Request Edit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WO Warning Dialog */}
+      <Dialog open={showWOWarningDialog} onOpenChange={setShowWOWarningDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5" />
+              Non-Critical Materials Shortage Warning
+            </DialogTitle>
+            <DialogDescription>
+              Some non-critical materials still have shortage. You can proceed to create the Work Order, but production may be affected.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingWOPlanItemId && plan && (
+            <div className="py-4">
+              <p className="text-sm font-medium text-slate-700 mb-2">Materials with shortage:</p>
+              <ul className="text-sm text-slate-600 space-y-1">
+                {plan.items
+                  .find((item) => item.id === pendingWOPlanItemId)
+                  ?.mrItems.filter((mr) => !mr.isCritical && mr.shortageQty > 0)
+                  .map((mr) => (
+                    <li key={mr.id} className="flex items-center gap-2">
+                      <span className="text-amber-500">•</span>
+                      {mr.materialCode} - {mr.materialName}:{" "}
+                      <span className="text-red-600 font-medium">
+                        -{mr.shortageQty.toLocaleString()} {mr.unit}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowWOWarningDialog(false);
+                setPendingWOPlanItemId(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => pendingWOPlanItemId && executeCreateWO(pendingWOPlanItemId)}
+              disabled={woLoading === pendingWOPlanItemId}
+              className="gap-2"
+            >
+              {woLoading === pendingWOPlanItemId ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Hammer className="h-4 w-4" />
+              )}
+              Proceed with WO
             </Button>
           </DialogFooter>
         </DialogContent>

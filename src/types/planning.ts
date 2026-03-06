@@ -107,7 +107,7 @@ export interface ProductionPlanItem {
 export interface PlanApprovalLog {
   id: string;
   planId: string;
-  action: "Submit" | "Approve" | "Reject" | "Cancel" | "Request Edit";
+  action: "Submit" | "Approve" | "Reject" | "Cancel" | "Request Edit" | "In Progress" | "Completed";
   userId: string;
   userName: string;
   timestamp: string;

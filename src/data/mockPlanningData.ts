@@ -680,6 +680,46 @@ export const planningService = {
   },
 
   /**
+   * Request edit for approved plan
+   */
+  requestEdit: async (planId: string, reason: string): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const plan = mockProductionPlans.find((p) => p.id === planId);
+    if (!plan) throw new Error("Plan not found");
+
+    plan.approvalLogs.push({
+      id: `log-${Date.now()}`,
+      planId,
+      action: "Request Edit",
+      userId: "user-001",
+      userName: "Ahmad Supervisor",
+      timestamp: new Date().toISOString(),
+      notes: reason,
+    });
+  },
+
+  /**
+   * Update plan status to In Progress
+   */
+  updatePlanStatus: async (planId: string, status: ProductionPlanStatus): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const plan = mockProductionPlans.find((p) => p.id === planId);
+    if (!plan) throw new Error("Plan not found");
+
+    plan.status = status;
+    plan.approvalLogs.push({
+      id: `log-${Date.now()}`,
+      planId,
+      action: status === ProductionPlanStatus.IN_PROGRESS ? "In Progress" : "Completed",
+      userId: "user-001",
+      userName: "Ahmad Supervisor",
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
    * Create PR from selected MR items
    */
   createPRFromMR: async (data: {
