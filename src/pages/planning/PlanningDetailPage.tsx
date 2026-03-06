@@ -21,6 +21,11 @@ import {
   ShoppingCart,
   Hammer,
   Check,
+  Download,
+  FileSpreadsheet,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +81,11 @@ export function PlanningDetailPage() {
 
   // WO state
   const [woLoading, setWOLoading] = useState<string | null>(null); // plan item id
+
+  // MR Filter & Sort state
+  const [mrFilter, setMRFilter] = useState<"all" | "shortage" | "no-shortage">("all");
+  const [mrSortBy, setMRSortBy] = useState<"priority" | "material" | "shortage">("priority");
+  const [mrSortOrder, setMRSortOrder] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     loadPlan();
@@ -226,6 +236,226 @@ export function PlanningDetailPage() {
       console.error("Failed to create WO:", error);
     } finally {
       setWOLoading(null);
+    }
+  };
+
+  // Filter MR items
+  const filterMRItems = (items: MRItem[]) => {
+    switch (mrFilter) {
+      case "shortage":
+        return items.filter((mr) => mr.shortageQty > 0);
+      case "no-shortage":
+        return items.filter((mr) => mr.shortageQty === 0);
+      default:
+        return items;
+    }
+  };
+
+  // Sort MR items
+  const sortMRItems = (items: MRItem[]) => {
+    return [...items].sort((a, b) => {
+      let comparison = 0;
+      switch (mrSortBy) {
+        case "material":
+          comparison = a.materialCode.localeCompare(b.materialCode);
+          break;
+        case "shortage":
+          comparison = a.shortageQty - b.shortageQty;
+          break;
+        case "priority":
+        default:
+          comparison = a.priorityWeight - b.priorityWeight;
+          break;
+      }
+      return mrSortOrder === "asc" ? comparison : -comparison;
+    });
+  };
+
+  // Toggle sort
+  const toggleSort = (sortBy: "priority" | "material" | "shortage") => {
+    if (mrSortBy === sortBy) {
+      setMRSortOrder(mrSortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setMRSortBy(sortBy);
+      setMRSortOrder("desc");
+    }
+  };
+
+  // Select all shortage items
+  const handleSelectAllShortage = () => {
+    const planItem = plan?.items.find((item) => item.id === currentPlanItemForPR);
+    if (!planItem) return;
+
+    const allShortageItems = planItem.mrItems.filter(
+      (mr) => mr.shortageQty > 0 && !mr.prId
+    );
+    setSelectedMRItems(allShortageItems);
+  };
+
+  // Deselect all
+  const handleDeselectAll = () => {
+    setSelectedMRItems([]);
+  };
+
+  // Export MR to CSV
+  const handleExportMR = (format: "csv" | "pdf") => {
+    if (!plan) return;
+
+    // Prepare data for export
+    const exportData: {
+      planNumber: string;
+      productCode: string;
+      productName: string;
+      quantity: number;
+      materialCode: string;
+      materialName: string;
+      requiredQty: number;
+      availableQty: number;
+      shortageQty: number;
+      unit: string;
+      priorityWeight: number;
+      status: string;
+    }[] = [];
+
+    plan.items.forEach((item) => {
+      item.mrItems.forEach((mr) => {
+        exportData.push({
+          planNumber: plan.planNumber,
+          productCode: item.productCode,
+          productName: item.productName,
+          quantity: item.quantity,
+          materialCode: mr.materialCode,
+          materialName: mr.materialName,
+          requiredQty: mr.requiredQty,
+          availableQty: mr.availableQty,
+          shortageQty: mr.shortageQty,
+          unit: mr.unit,
+          priorityWeight: mr.priorityWeight,
+          status: mr.status,
+        });
+      });
+    });
+
+    if (format === "csv") {
+      // Generate CSV
+      const headers = [
+        "Plan Number",
+        "Product Code",
+        "Product Name",
+        "Quantity",
+        "Material Code",
+        "Material Name",
+        "Required Qty",
+        "Available Qty",
+        "Shortage Qty",
+        "Unit",
+        "Priority %",
+        "Status",
+      ];
+      const csvContent = [
+        headers.join(","),
+        ...exportData.map((row) =>
+          [
+            row.planNumber,
+            row.productCode,
+            `"${row.productName}"`,
+            row.quantity,
+            row.materialCode,
+            `"${row.materialName}"`,
+            row.requiredQty,
+            row.availableQty,
+            row.shortageQty,
+            row.unit,
+            row.priorityWeight,
+            row.status,
+          ].join(",")
+        ),
+      ].join("\n");
+
+      // Download CSV
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `MR-${plan.planNumber}.csv`;
+      link.click();
+    } else {
+      // For PDF, we'll create a simple HTML table and print it
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) return;
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>MR Report - ${plan.planNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { font-size: 18px; margin-bottom: 10px; }
+            .info { margin-bottom: 20px; }
+            .info p { margin: 4px 0; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+            th { background-color: #f5f5f5; }
+            .shortage { color: red; font-weight: bold; }
+            .fulfilled { color: green; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <h1>Material Requirement Report</h1>
+          <div class="info">
+            <p><strong>Plan Number:</strong> ${plan.planNumber}</p>
+            <p><strong>HO Order Reference:</strong> ${plan.hoOrderReference}</p>
+            <p><strong>Plan Date:</strong> ${formatDate(plan.planDate)}</p>
+            <p><strong>Target Completion:</strong> ${formatDate(plan.targetCompletionDate)}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Material</th>
+                <th>Required</th>
+                <th>Available</th>
+                <th>Shortage</th>
+                <th>Priority</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${plan.items
+                .map((item) =>
+                  item.mrItems
+                    .map(
+                      (mr) => `
+                <tr>
+                  <td>${item.productCode}</td>
+                  <td>${mr.materialCode} - ${mr.materialName}</td>
+                  <td>${mr.requiredQty.toLocaleString()} ${mr.unit}</td>
+                  <td>${mr.availableQty.toLocaleString()} ${mr.unit}</td>
+                  <td class="${mr.shortageQty > 0 ? "shortage" : ""}">${
+                    mr.shortageQty > 0
+                      ? `-${mr.shortageQty.toLocaleString()} ${mr.unit}`
+                      : "-"
+                  }</td>
+                  <td>${mr.priorityWeight}%</td>
+                  <td class="${mr.status === "Fulfilled" ? "fulfilled" : ""}">${
+                    mr.status
+                  }</td>
+                </tr>
+              `
+                    )
+                    .join("")
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.print();
     }
   };
 
@@ -496,12 +726,36 @@ export function PlanningDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Plan Items</span>
-            {plan.status === ProductionPlanStatus.DRAFT && (
-              <Button variant="outline" size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Product
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {plan.items.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => handleExportMR("csv")}
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Export CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => handleExportMR("pdf")}
+                  >
+                    <Download className="h-4 w-4" />
+                    Export PDF
+                  </Button>
+                </div>
+              )}
+              {plan.status === ProductionPlanStatus.DRAFT && (
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Product
+                </Button>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -576,21 +830,89 @@ export function PlanningDetailPage() {
                   {/* Expanded MR Items */}
                   {expandedItems.has(item.id) && item.mrItems.length > 0 && (
                     <div className="mt-4 ml-10 border rounded-lg overflow-hidden">
+                      {/* Filter & Sort Controls */}
+                      <div className="flex items-center justify-between p-3 bg-slate-50 border-b">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-slate-500">Filter:</span>
+                          <div className="flex gap-1">
+                            <Button
+                              variant={mrFilter === "all" ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setMRFilter("all")}
+                            >
+                              All
+                            </Button>
+                            <Button
+                              variant={mrFilter === "shortage" ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setMRFilter("shortage")}
+                            >
+                              Shortage
+                            </Button>
+                            <Button
+                              variant={mrFilter === "no-shortage" ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setMRFilter("no-shortage")}
+                            >
+                              No Shortage
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                          {filterMRItems(item.mrItems).length} items
+                          {mrFilter === "shortage" && ` (${filterMRItems(item.mrItems).filter(m => m.shortageQty > 0).length} with shortage)`}
+                        </div>
+                      </div>
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-slate-50">
-                            <TableHead>Material</TableHead>
+                            <TableHead
+                              className="cursor-pointer hover:bg-slate-100"
+                              onClick={() => toggleSort("material")}
+                            >
+                              <div className="flex items-center gap-1">
+                                Material
+                                {mrSortBy === "material" && (
+                                  mrSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                                )}
+                                {mrSortBy !== "material" && <ArrowUpDown className="h-3 w-3 text-slate-400" />}
+                              </div>
+                            </TableHead>
                             <TableHead className="text-right">Required</TableHead>
                             <TableHead className="text-right">Available</TableHead>
-                            <TableHead className="text-right">Shortage</TableHead>
-                            <TableHead className="text-center">Priority</TableHead>
+                            <TableHead
+                              className="text-right cursor-pointer hover:bg-slate-100"
+                              onClick={() => toggleSort("shortage")}
+                            >
+                              <div className="flex items-center justify-end gap-1">
+                                Shortage
+                                {mrSortBy === "shortage" && (
+                                  mrSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                                )}
+                                {mrSortBy !== "shortage" && <ArrowUpDown className="h-3 w-3 text-slate-400" />}
+                              </div>
+                            </TableHead>
+                            <TableHead
+                              className="text-center cursor-pointer hover:bg-slate-100"
+                              onClick={() => toggleSort("priority")}
+                            >
+                              <div className="flex items-center justify-center gap-1">
+                                Priority
+                                {mrSortBy === "priority" && (
+                                  mrSortOrder === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                                )}
+                                {mrSortBy !== "priority" && <ArrowUpDown className="h-3 w-3 text-slate-400" />}
+                              </div>
+                            </TableHead>
                             <TableHead className="text-center">Status</TableHead>
                             <TableHead className="text-center">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {item.mrItems
-                            .sort((a, b) => b.priorityWeight - a.priorityWeight)
+                          {sortMRItems(filterMRItems(item.mrItems))
                             .map((mrItem) => (
                               <TableRow
                                 key={mrItem.id}
@@ -832,6 +1154,29 @@ export function PlanningDetailPage() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Select All / Deselect All */}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAllShortage}
+                >
+                  Select All Shortage
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDeselectAll}
+                >
+                  Deselect All
+                </Button>
+              </div>
+              <span className="text-sm text-slate-500">
+                {selectedMRItems.length} selected
+              </span>
+            </div>
+
             {/* MR Items Selection */}
             <div className="border rounded-lg overflow-hidden">
               <Table>
