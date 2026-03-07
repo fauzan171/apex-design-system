@@ -9,7 +9,8 @@ dist/
 .env.local
 .env.*.local
 
-# IDE
+# tools development
+.claude/
 .vscode/
 .idea/
 
@@ -23,3 +24,6 @@ npm-debug.log*
 
 # TypeScript cache
 *.tsbuildinfo
+
+#others
+apex-design-system/ 

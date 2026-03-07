@@ -4,6 +4,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { PlanningListPage } from "@/pages/planning/PlanningListPage";
 import { PlanningDetailPage } from "@/pages/planning/PlanningDetailPage";
 import { PlanningFormPage } from "@/pages/planning/PlanningFormPage";
+import { WarehousePage } from "@/pages/warehouse/WarehousePage";
 
 function App() {
   return (
@@ -16,8 +17,8 @@ function App() {
           <Route path="/planning/create" element={<PlanningFormPage />} />
           <Route path="/planning/:id" element={<PlanningDetailPage />} />
           <Route path="/planning/:id/edit" element={<PlanningFormPage />} />
+          <Route path="/warehouse" element={<WarehousePage />} />
           <Route path="/purchasing" element={<div className="p-8 text-slate-500">Purchasing Module - Coming Soon</div>} />
-          <Route path="/warehouse" element={<div className="p-8 text-slate-500">Warehouse Module - Coming Soon</div>} />
           <Route path="/production" element={<div className="p-8 text-slate-500">Production Module - Coming Soon</div>} />
           <Route path="/delivery" element={<div className="p-8 text-slate-500">Delivery Module - Coming Soon</div>} />
         </Routes>
