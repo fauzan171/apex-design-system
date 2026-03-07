@@ -7,6 +7,9 @@ import { PlanningFormPage } from "@/pages/planning/PlanningFormPage";
 import { PurchasingListPage } from "@/pages/purchasing/PurchasingListPage";
 import { PurchasingDetailPage } from "@/pages/purchasing/PurchasingDetailPage";
 import { PurchasingFormPage } from "@/pages/purchasing/PurchasingFormPage";
+import { DeliveryListPage } from "@/pages/delivery/DeliveryListPage";
+import { DeliveryDetailPage } from "@/pages/delivery/DeliveryDetailPage";
+import { DeliveryFormPage } from "@/pages/delivery/DeliveryFormPage";
 
 function App() {
   return (
@@ -25,7 +28,10 @@ function App() {
           <Route path="/purchasing/:id/edit" element={<PurchasingFormPage />} />
           <Route path="/warehouse" element={<div className="p-8 text-slate-500">Warehouse Module - Coming Soon</div>} />
           <Route path="/production" element={<div className="p-8 text-slate-500">Production Module - Coming Soon</div>} />
-          <Route path="/delivery" element={<div className="p-8 text-slate-500">Delivery Module - Coming Soon</div>} />
+          <Route path="/delivery" element={<DeliveryListPage />} />
+          <Route path="/delivery/create" element={<DeliveryFormPage />} />
+          <Route path="/delivery/:id" element={<DeliveryDetailPage />} />
+          <Route path="/delivery/:id/edit" element={<DeliveryFormPage />} />
         </Routes>
       </MainLayout>
     </BrowserRouter>
