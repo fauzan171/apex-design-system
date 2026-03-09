@@ -31,7 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { productionService } from "@/data/mockProductionData";
+import { productionService } from "@/services/productionService";
 import type { WorkOrder, WOStep } from "@/types/production";
 import {
   WOStatus,

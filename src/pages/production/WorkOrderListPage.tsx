@@ -34,7 +34,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { productionService } from "@/data/mockProductionData";
+import { productionService } from "@/services/productionService";
 import type { WorkOrder, WOStatusSummary, ProductionMetrics } from "@/types/production";
 import {
   WOStatus,

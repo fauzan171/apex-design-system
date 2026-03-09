@@ -28,8 +28,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { productionService } from "@/data/mockProductionData";
-import { planningService } from "@/data/mockPlanningData";
+import { productionService } from "@/services/productionService";
+import { planningService } from "@/services/planningService";
 import type { WOStepFormData } from "@/types/production";
 import type { ProductionPlan } from "@/types/planning";
 import { WOStatus } from "@/types/production";
