@@ -34,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { purchasingService } from "@/data/mockPurchasingData";
+import { purchasingService } from "@/services/purchasingService";
 import type { PurchaseRequest, PRStatusSummary } from "@/types/purchasing";
 import { PRStatus, prStatusColors } from "@/types/purchasing";
 import { cn } from "@/lib/utils";

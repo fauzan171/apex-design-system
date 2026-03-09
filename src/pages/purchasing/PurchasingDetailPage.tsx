@@ -42,7 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { purchasingService } from "@/data/mockPurchasingData";
+import { purchasingService } from "@/services/purchasingService";
 import type { PurchaseRequest } from "@/types/purchasing";
 import {
   PRStatus,

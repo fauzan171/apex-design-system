@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { purchasingService } from "@/data/mockPurchasingData";
+import { purchasingService } from "@/services/purchasingService";
 import type { PurchaseRequest, PRItem } from "@/types/purchasing";
 import { cn } from "@/lib/utils";
 
