@@ -52,7 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { planningService } from "@/data/mockPlanningData";
+import { planningService } from "@/services/planningService";
 import type { ProductionPlan, MRItem } from "@/types/planning";
 import {
   ProductionPlanStatus,

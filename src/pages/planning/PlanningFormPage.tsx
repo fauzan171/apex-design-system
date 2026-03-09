@@ -38,7 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { planningService, mockProducts, mockBoM, mockStockLevels } from "@/data/mockPlanningData";
+import { planningService, mockProducts, mockBoM, mockStockLevels } from "@/services/planningService";
 import { cn } from "@/lib/utils";
 
 interface PlanItemWithMR {

@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { planningService } from "@/data/mockPlanningData";
+import { planningService } from "@/services/planningService";
 import type { ProductionPlan } from "@/types/planning";
 import {
   ProductionPlanStatus,

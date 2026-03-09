@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { deliveryService } from "@/data/mockDeliveryData";
+import { deliveryService } from "@/services/deliveryService";
 import type { DeliveryOrder } from "@/types/delivery";
 import { DOStatus, doStatusColors } from "@/types/delivery";
 import { cn } from "@/lib/utils";

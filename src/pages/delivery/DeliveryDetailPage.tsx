@@ -39,7 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deliveryService } from "@/data/mockDeliveryData";
+import { deliveryService } from "@/services/deliveryService";
 import type { DeliveryOrder } from "@/types/delivery";
 import { DOStatus, doStatusColors, canTransitionTo } from "@/types/delivery";
 import { cn } from "@/lib/utils";
