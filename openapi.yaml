@@ -1,0 +1,7232 @@
+openapi: 3.0.3
+info:
+  title: AppEx ERP API
+  description: |
+    Comprehensive ERP system API covering authentication, user management, master data, 
+    production planning, production execution, purchasing, warehouse management, and dashboard analytics.
+    
+    ## Authentication
+    All protected endpoints require session-based authentication with JWT tokens.
+    
+    ## Permission System
+    - Module-level permissions: `{module}:{action}`
+    - Actions: `view`, `create`, `edit`, `delete`, `approve`, `cancel`, `start`, `complete`, `qc`, `inspect`, `issue`, `do`, `bast`, `reports`, `export`
+    - Wildcard permission: `{module}:*` grants all permissions for that module
+  version: 1.0.0
+  contact:
+    name: AppEx ERP Support
+
+servers:
+  - url: http://localhost:8787/api/v1
+    description: Local development server
+  - url: https://api.appex-erp.com/api/v1
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Users
+    description: User management (Super Admin only)
+  - name: Roles
+    description: Role and permission management
+  - name: Permissions
+    description: Permission definitions and approvers
+  - name: Profile
+    description: Current user profile and permissions
+  - name: Audit Logs
+    description: System audit trail
+  - name: Products
+    description: Product master data management
+  - name: BOM
+    description: Bill of Materials management
+  - name: Import/Export
+    description: Data import and export operations
+  - name: Production Planning
+    description: Production plan creation and approval workflow
+  - name: Production
+    description: Work order execution and quality control
+  - name: Purchasing
+    description: Purchase requests and delivery orders
+  - name: Warehouse
+    description: Stock management, goods receipt/issue, and warehouse operations
+  - name: Dashboard
+    description: KPI dashboards and analytics
+  - name: Health Check
+    description: System health monitoring
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Session-based authentication with JWT token
+
+  schemas:
+    # ========== Common Schemas ==========
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 100
+        totalPages:
+          type: integer
+          example: 5
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: Invalid input data
+
+    # ========== Auth Schemas ==========
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user @appex.com
+        password:
+          type: string
+          minLength: 6
+          example: password123
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+        - confirmPassword
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6
+        confirmPassword:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        department:
+          type: string
+          enum: [GA, FINANCE, PURCHASING, WAREHOUSE, PRODUCTION, QC, PLANNING, SALES]
+        role:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ========== Role Schemas ==========
+    CreateRoleRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: Warehouse Manager
+        description:
+          type: string
+        permissionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    UpdateRoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ========== Permission Schemas ==========
+    Permission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        module:
+          type: string
+          example: warehouse
+        action:
+          type: string
+          example: view
+        description:
+          type: string
+
+    # ========== User Management Schemas ==========
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - fullName
+        - department
+      properties:
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        department:
+          type: string
+          enum: [GA, FINANCE, PURCHASING, WAREHOUSE, PRODUCTION, QC, PLANNING, SALES]
+        password:
+          type: string
+          minLength: 6
+        roleIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        department:
+          type: string
+          enum: [GA, FINANCE, PURCHASING, WAREHOUSE, PRODUCTION, QC, PLANNING, SALES]
+        roleIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ResetPasswordRequest:
+      type: object
+      properties:
+        newPassword:
+          type: string
+          minLength: 6
+
+    # ========== Profile Schemas ==========
+    UpdateProfileRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        department:
+          type: string
+          enum: [GA, FINANCE, PURCHASING, WAREHOUSE, PRODUCTION, QC, PLANNING, SALES]
+
+    ChangeOwnPasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+        - confirmPassword
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6
+        confirmPassword:
+          type: string
+
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        userId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: object
+
+    # ========== Audit Log Schemas ==========
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [CREATE, UPDATE, DELETE, STATUS_CHANGE, APPROVAL, REJECTION]
+        entityType:
+          type: string
+        entityId:
+          type: string
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        changes:
+          type: object
+
+    # ========== Product Schemas ==========
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: FG-001
+        name:
+          type: string
+        type:
+          type: string
+          enum: [FG, SEMI, RAW, PACKAGING, SPAREPART, SUPPORT]
+        description:
+          type: string
+        baseUnit:
+          type: string
+          example: PCS
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProductRequest:
+      type: object
+      required:
+        - code
+        - name
+        - type
+        - baseUnit
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [FG, SEMI, RAW, PACKAGING, SPAREPART, SUPPORT]
+        description:
+          type: string
+        baseUnit:
+          type: string
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        baseUnit:
+          type: string
+
+    # ========== BOM Schemas ==========
+    BoM:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        product:
+          $ref: '#/components/schemas/Product'
+        status:
+          type: string
+          enum: [draft, active, inactive]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoMItem'
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BoMItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        materialId:
+          type: string
+          format: uuid
+        material:
+          $ref: '#/components/schemas/Product'
+        quantityRequired:
+          type: number
+          format: decimal
+        unit:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateBoMRequest:
+      type: object
+      required:
+        - status
+        - items
+      properties:
+        status:
+          type: string
+          enum: [draft, active]
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - materialId
+              - quantityRequired
+              - unit
+            properties:
+              materialId:
+                type: string
+                format: uuid
+              quantityRequired:
+                type: number
+                format: decimal
+              unit:
+                type: string
+
+    UpdateBoMStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [draft, active, inactive]
+
+    AddBoMItemRequest:
+      type: object
+      required:
+        - materialId
+        - quantityRequired
+        - unit
+      properties:
+        materialId:
+          type: string
+          format: uuid
+        quantityRequired:
+          type: number
+          format: decimal
+        unit:
+          type: string
+
+    UpdateBoMItemRequest:
+      type: object
+      properties:
+        quantityRequired:
+          type: number
+          format: decimal
+        unit:
+          type: string
+
+    # ========== Production Plan Schemas ==========
+    ProductionPlan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        plan_date:
+          type: string
+          format: date
+        target_completion_date:
+          type: string
+          format: date
+        ho_order_reference:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [draft, submitted, approved, rejected, in_progress, completed, cancelled, edit_requested]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductionPlanItem'
+        approvalHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalHistory'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProductionPlanItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        planId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        product:
+          $ref: '#/components/schemas/Product'
+        quantity:
+          type: number
+          format: decimal
+        material_priorities:
+          type: object
+        status:
+          type: string
+        materialRequirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialRequirement'
+
+    MaterialRequirement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        itemId:
+          type: string
+          format: uuid
+        materialId:
+          type: string
+          format: uuid
+        material:
+          $ref: '#/components/schemas/Product'
+        requiredQuantity:
+          type: number
+          format: decimal
+        availableStock:
+          type: number
+          format: decimal
+        shortageQuantity:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [pending, allocated, purchased, received, shortage_accepted]
+        priority_weight:
+          type: number
+          format: decimal
+
+    CreateProductionPlanRequest:
+      type: object
+      required:
+        - plan_date
+        - target_completion_date
+      properties:
+        plan_date:
+          type: string
+          format: date
+        target_completion_date:
+          type: string
+          format: date
+        ho_order_reference:
+          type: string
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+                format: uuid
+              quantity:
+                type: number
+              material_priorities:
+                type: object
+
+    UpdateProductionPlanRequest:
+      type: object
+      properties:
+        plan_date:
+          type: string
+          format: date
+        target_completion_date:
+          type: string
+          format: date
+        ho_order_reference:
+          type: string
+        notes:
+          type: string
+
+    SubmitPlanRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    ApprovePlanRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    RejectPlanRequest:
+      type: object
+      required:
+        - notes
+      properties:
+        notes:
+          type: string
+
+    CancelPlanRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+
+    RequestEditRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+
+    AddPlanItemRequest:
+      type: object
+      required:
+        - product_id
+        - quantity
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+        material_priorities:
+          type: object
+
+    UpdatePlanItemRequest:
+      type: object
+      properties:
+        quantity:
+          type: number
+        material_priorities:
+          type: object
+
+    UpdateMaterialPrioritiesRequest:
+      type: object
+      properties:
+        material_priorities:
+          type: object
+
+    UpdateMrItemStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [pending, allocated, purchased, received, shortage_accepted]
+        notes:
+          type: string
+
+    SetPriorityWeightsRequest:
+      type: object
+      properties:
+        weights:
+          type: object
+
+    AutoDistributeWeightsRequest:
+      type: object
+      required:
+        - strategy
+      properties:
+        strategy:
+          type: string
+          enum: [equal, proportional, custom]
+        options:
+          type: object
+
+    # ========== Work Order Schemas ==========
+    WorkOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        planId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        product:
+          $ref: '#/components/schemas/Product'
+        quantity:
+          type: number
+          format: decimal
+        quantityCompleted:
+          type: number
+          format: decimal
+        target_date:
+          type: string
+          format: date
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [draft, released, in_progress, marked_qc, qc_in_progress, qc_passed, qc_failed, completed, cancelled]
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WOStep'
+        progress:
+          $ref: '#/components/schemas/WOProgress'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WOStep:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        woId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sequence:
+          type: integer
+        status:
+          type: string
+          enum: [pending, in_progress, completed]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    WOProgress:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        woId:
+          type: string
+          format: uuid
+        currentStepId:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+          format: decimal
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressPhoto'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProgressPhoto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        progressId:
+          type: string
+          format: uuid
+        url:
+          type: string
+        caption:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    CreateWORequest:
+      type: object
+      required:
+        - product_id
+        - quantity
+        - target_date
+      properties:
+        plan_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+        target_date:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    UpdateWORequest:
+      type: object
+      properties:
+        target_date:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    CancelWORequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+
+    # ========== QC Session Schemas ==========
+    QCSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        woId:
+          type: string
+          format: uuid
+        workOrder:
+          $ref: '#/components/schemas/WorkOrder'
+        status:
+          type: string
+          enum: [in_progress, completed]
+        result:
+          type: string
+          enum: [pass, fail, pending]
+        notes:
+          type: string
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/QCFinding'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    QCFinding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        description:
+          type: string
+        reworkNotes:
+          type: string
+        status:
+          type: string
+          enum: [open, resolved]
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/QCFindingPhoto'
+        resolvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    QCFindingPhoto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        findingId:
+          type: string
+          format: uuid
+        url:
+          type: string
+        type:
+          type: string
+          enum: [finding, rework]
+        uploadedAt:
+          type: string
+          format: date-time
+
+    AddFindingRequest:
+      type: object
+      required:
+        - description
+        - reworkNotes
+      properties:
+        description:
+          type: string
+        reworkNotes:
+          type: string
+
+    QCNotesRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    # ========== Purchase Request Schemas ==========
+    PurchaseRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        mr_id:
+          type: string
+          format: uuid
+        required_date:
+          type: string
+          format: date
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        notes:
+          type: string
+        lead_time_estimate:
+          type: integer
+        status:
+          type: string
+          enum: [draft, submitted, approved, rejected, processing, do_issued, resubmitted, cancelled]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PRItem'
+        approvalHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalHistory'
+        deliveryOrders:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryOrder'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PRItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        prId:
+          type: string
+          format: uuid
+        materialId:
+          type: string
+          format: uuid
+        material:
+          $ref: '#/components/schemas/Product'
+        quantityRequested:
+          type: number
+          format: decimal
+        quantityApproved:
+          type: number
+          format: decimal
+        quantityReceived:
+          type: number
+          format: decimal
+        unit:
+          type: string
+        notes:
+          type: string
+
+    ApprovalHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        entityType:
+          type: string
+        entityId:
+          type: string
+        approverId:
+          type: string
+          format: uuid
+        approver:
+          $ref: '#/components/schemas/User'
+        action:
+          type: string
+          enum: [approve, reject, request_edit]
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreatePRRequest:
+      type: object
+      required:
+        - required_date
+        - priority
+        - items
+      properties:
+        mr_id:
+          type: string
+          format: uuid
+        required_date:
+          type: string
+          format: date
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        notes:
+          type: string
+        lead_time_estimate:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - materialId
+              - quantityRequested
+            properties:
+              materialId:
+                type: string
+                format: uuid
+              quantityRequested:
+                type: number
+              notes:
+                type: string
+
+    UpdatePRRequest:
+      type: object
+      properties:
+        required_date:
+          type: string
+          format: date
+        priority:
+          type: string
+        notes:
+          type: string
+        lead_time_estimate:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+
+    SubmitPRRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    ApprovePRRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    RejectPRRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+        notes:
+          type: string
+
+    AddPRItemRequest:
+      type: object
+      required:
+        - materialId
+        - quantityRequested
+      properties:
+        materialId:
+          type: string
+          format: uuid
+        quantityRequested:
+          type: number
+        notes:
+          type: string
+
+    UpdatePRItemRequest:
+      type: object
+      properties:
+        quantityRequested:
+          type: number
+        notes:
+          type: string
+
+    UpdateLeadTimeRequest:
+      type: object
+      properties:
+        lead_time_estimate:
+          type: integer
+
+    MarkAsProcessingRequest:
+      type: object
+      properties:
+        do_number:
+          type: string
+        do_date:
+          type: string
+          format: date
+
+    MarkAsDOIssuedRequest:
+      type: object
+      properties:
+        do_number:
+          type: string
+
+    AddNoteRequest:
+      type: object
+      properties:
+        note:
+          type: string
+
+    # ========== Delivery Order Schemas ==========
+    DeliveryOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        prId:
+          type: string
+          format: uuid
+        do_number:
+          type: string
+        do_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [draft, released, partially_received, received, cancelled]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DOItem'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DOItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        doId:
+          type: string
+          format: uuid
+        prItemId:
+          type: string
+          format: uuid
+        materialId:
+          type: string
+          format: uuid
+        material:
+          $ref: '#/components/schemas/Product'
+        quantity:
+          type: number
+          format: decimal
+        quantityReceived:
+          type: number
+          format: decimal
+        unit:
+          type: string
+
+    # ========== Warehouse Schemas ==========
+    Stock:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        product:
+          $ref: '#/components/schemas/Product'
+        quantity:
+          type: number
+          format: decimal
+        safetyStock:
+          type: number
+          format: decimal
+        location:
+          type: string
+        lastUpdated:
+          type: string
+          format: date-time
+
+    GoodsReceipt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        prId:
+          type: string
+          format: uuid
+        purchaseRequest:
+          $ref: '#/components/schemas/PurchaseRequest'
+        do_number:
+          type: string
+        gr_date:
+          type: string
+          format: date
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [draft, inspection_pending, inspection_in_progress, inspection_approved, inspection_rejected, completed, cancelled]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GRItem'
+        bastInbound:
+          $ref: '#/components/schemas/BASTInbound'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GRItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        grId:
+          type: string
+          format: uuid
+        prItemId:
+          type: string
+          format: uuid
+        materialId:
+          type: string
+          format: uuid
+        material:
+          $ref: '#/components/schemas/Product'
+        quantityReceived:
+          type: number
+          format: decimal
+        quantityAccepted:
+          type: number
+          format: decimal
+        quantityRejected:
+          type: number
+          format: decimal
+        unit:
+          type: string
+        inspectionNotes:
+          type: string
+
+    CreateGRRequest:
+      type: object
+      required:
+        - pr_id
+        - do_number
+        - gr_date
+        - items
+      properties:
+        pr_id:
+          type: string
+          format: uuid
+        do_number:
+          type: string
+        gr_date:
+          type: string
+          format: date
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - prItemId
+              - quantityReceived
+            properties:
+              prItemId:
+                type: string
+                format: uuid
+              quantityReceived:
+                type: number
+              inspectionNotes:
+                type: string
+
+    UpdateGRRequest:
+      type: object
+      properties:
+        gr_date:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    UpdateGRItemRequest:
+      type: object
+      properties:
+        quantityAccepted:
+          type: number
+        quantityRejected:
+          type: number
+        inspectionNotes:
+          type: string
+
+    CancelGRRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+        notes:
+          type: string
+
+    Inspection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        grId:
+          type: string
+          format: uuid
+        goodsReceipt:
+          $ref: '#/components/schemas/GoodsReceipt'
+        status:
+          type: string
+          enum: [pending, in_progress, submitted, approved, rejected]
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectionPhoto'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    InspectionPhoto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        inspectionId:
+          type: string
+          format: uuid
+        url:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    BASTInbound:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        grId:
+          type: string
+          format: uuid
+        bast_number:
+          type: string
+        bast_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [generated, signed]
+        pdfUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    GoodsIssue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        woId:
+          type: string
+          format: uuid
+        workOrder:
+          $ref: '#/components/schemas/WorkOrder'
+        status:
+          type: string
+          enum: [draft, submitted, approved, rejected, issued, cancelled]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GIItem'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GIItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        giId:
+          type: string
+          format: uuid
+        materialId:
+          type: string
+          format: uuid
+        material:
+          $ref: '#/components/schemas/Product'
+        quantityRequested:
+          type: number
+          format: decimal
+        quantityIssued:
+          type: number
+          format: decimal
+        unit:
+          type: string
+
+    FinishedGoodsReceipt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        woId:
+          type: string
+          format: uuid
+        workOrder:
+          $ref: '#/components/schemas/WorkOrder'
+        quantity:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [received]
+        receivedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    WarehouseDO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        do_number:
+          type: string
+        do_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [draft, released, partially_delivered, delivered, cancelled]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WarehouseDOItem'
+        bastOutbound:
+          $ref: '#/components/schemas/BASTOutbound'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WarehouseDOItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        doId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        product:
+          $ref: '#/components/schemas/Product'
+        quantity:
+          type: number
+          format: decimal
+        quantityDelivered:
+          type: number
+          format: decimal
+        unit:
+          type: string
+
+    BASTOutbound:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        doId:
+          type: string
+          format: uuid
+        bast_number:
+          type: string
+        bast_date:
+          type: string
+          format: date
+        fileUrl:
+          type: string
+        uploadedBy:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    SafetyStockUpdateRequest:
+      type: object
+      required:
+        - safety_stock
+      properties:
+        safety_stock:
+          type: number
+          format: decimal
+
+    # ========== Dashboard Schemas ==========
+    DashboardSummary:
+      type: object
+      properties:
+        production:
+          type: object
+          properties:
+            totalPlans:
+              type: integer
+            completedPlans:
+              type: integer
+            inProgressPlans:
+              type: integer
+            efficiency:
+              type: number
+        delivery:
+          type: object
+          properties:
+            onTimeDelivery:
+              type: number
+            totalDeliveries:
+              type: integer
+        inventory:
+          type: object
+          properties:
+            totalValue:
+              type: number
+            lowStockItems:
+              type: integer
+        purchasing:
+          type: object
+          properties:
+            openPRs:
+              type: integer
+            avgLeadTime:
+              type: number
+
+    KPIResponse:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              value:
+                type: number
+              unit:
+                type: string
+              trend:
+                type: string
+                enum: [up, down, stable]
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        category:
+          type: string
+          enum: [production, inventory, purchasing, quality]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+  parameters:
+    # ========== Common Path Parameters ==========
+    idParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    productIdParam:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    planIdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    woIdParam:
+      name: woId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    stepIdParam:
+      name: stepId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    progressIdParam:
+      name: progressId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    photoIdParam:
+      name: photoId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    sessionIdParam:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    findingIdParam:
+      name: findingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    prIdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    itemIdParam:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    grIdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    giIdParam:
+      name: giId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    doIdParam:
+      name: doId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    bastIdParam:
+      name: bastId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    # ========== Common Query Parameters ==========
+    pageParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Page number for pagination
+
+    limitParam:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Number of items per page
+
+    searchParam:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 255
+      description: Search term
+
+    sortByParam:
+      name: sortBy
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Field to sort by
+
+    sortOrderParam:
+      name: sortOrder
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+      description: Sort order
+
+    startDateParam:
+      name: startDate
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: Start date filter (YYYY-MM-DD)
+
+    endDateParam:
+      name: endDate
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: End date filter (YYYY-MM-DD)
+
+    statusParam:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Status filter
+
+security:
+  - sessionAuth: []
+
+paths:
+  # ========== Health Check ==========
+  /api/health:
+    get:
+      tags:
+        - Health Check
+      summary: Health check endpoint
+      security: []
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: 1.0.0
+
+  # ========== Authentication ==========
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      user:
+                        $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user profile
+      responses:
+        '200':
+          description: Current user data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+
+  /api/v1/auth/change-password:
+    post:
+      tags:
+        - Authentication
+      summary: Change password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== User Management ==========
+  /api/v1/users:
+    get:
+      tags:
+        - Users
+      summary: List all users
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/searchParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: department
+          in: query
+          schema:
+            type: string
+            enum: [GA, FINANCE, PURCHASING, WAREHOUSE, PRODUCTION, QC, PLANNING, SALES]
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+    post:
+      tags:
+        - Users
+      summary: Create new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+
+  /api/v1/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    get:
+      tags:
+        - Users
+      summary: Get user by ID
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+    put:
+      tags:
+        - Users
+      summary: Update user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+    delete:
+      tags:
+        - Users
+      summary: Delete user
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/users/{id}/deactivate:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    post:
+      tags:
+        - Users
+      summary: Deactivate user
+      responses:
+        '200':
+          description: User deactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/users/{id}/reactivate:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    post:
+      tags:
+        - Users
+      summary: Reactivate user
+      responses:
+        '200':
+          description: User reactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/users/{id}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    post:
+      tags:
+        - Users
+      summary: Reset user password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/users/{id}/permissions:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    get:
+      tags:
+        - Users
+      summary: Get user permissions
+      responses:
+        '200':
+          description: User permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Permission'
+
+  # ========== Role Management ==========
+  /api/v1/roles:
+    get:
+      tags:
+        - Roles
+      summary: List roles
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/searchParam'
+      responses:
+        '200':
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Role'
+    post:
+      tags:
+        - Roles
+      summary: Create new role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+      responses:
+        '201':
+          description: Role created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Role'
+
+  /api/v1/roles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    get:
+      tags:
+        - Roles
+      summary: Get role by ID
+      responses:
+        '200':
+          description: Role details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Role'
+    put:
+      tags:
+        - Roles
+      summary: Update role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        '200':
+          description: Role updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Role'
+    delete:
+      tags:
+        - Roles
+      summary: Delete role
+      responses:
+        '200':
+          description: Role deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # ========== Permissions ==========
+  /api/v1/permissions:
+    get:
+      tags:
+        - Permissions
+      summary: List all permissions
+      responses:
+        '200':
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Permission'
+
+  /api/v1/permissions/approvers/{module}:
+    parameters:
+      - name: module
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Permissions
+      summary: Get approvers for module
+      responses:
+        '200':
+          description: List of approvers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+
+  # ========== Profile ==========
+  /api/v1/profile:
+    get:
+      tags:
+        - Profile
+      summary: Get current user profile
+      responses:
+        '200':
+          description: Profile data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+    put:
+      tags:
+        - Profile
+      summary: Update profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+
+  /api/v1/profile/change-password:
+    post:
+      tags:
+        - Profile
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeOwnPasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/profile/permissions:
+    get:
+      tags:
+        - Profile
+      summary: Get own permissions
+      responses:
+        '200':
+          description: Permission list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Permission'
+
+  /api/v1/profile/activity:
+    get:
+      tags:
+        - Profile
+      summary: Get activity log
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Activity list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityLog'
+
+  # ========== Audit Logs ==========
+  /api/v1/audit-logs:
+    get:
+      tags:
+        - Audit Logs
+      summary: List audit logs
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: entityType
+          in: query
+          schema:
+            type: string
+        - name: entityId
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: changedBy
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+      responses:
+        '200':
+          description: Paginated audit logs
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AuditLog'
+
+  /api/v1/audit-logs/{entityType}/{entityId}:
+    parameters:
+      - name: entityType
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: entityId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Audit Logs
+      summary: Get audit history by entity
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Entity audit history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+
+  # ========== Products ==========
+  /api/v1/products:
+    get:
+      tags:
+        - Products
+      summary: List products
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [FG, SEMI, RAW, PACKAGING, SPAREPART, SUPPORT]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - $ref: '#/components/parameters/searchParam'
+        - $ref: '#/components/parameters/sortByParam'
+        - $ref: '#/components/parameters/sortOrderParam'
+      responses:
+        '200':
+          description: Paginated product list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Product'
+    post:
+      tags:
+        - Products
+      summary: Create product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Product'
+
+  /api/v1/products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    get:
+      tags:
+        - Products
+      summary: Get product by ID
+      responses:
+        '200':
+          description: Product detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Product'
+    put:
+      tags:
+        - Products
+      summary: Update product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Product'
+
+  /api/v1/products/{id}/deactivate:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    post:
+      tags:
+        - Products
+      summary: Deactivate product
+      responses:
+        '200':
+          description: Product deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/products/{id}/activate:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    post:
+      tags:
+        - Products
+      summary: Activate product
+      responses:
+        '200':
+          description: Product activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/products/import:
+    post:
+      tags:
+        - Import/Export
+      summary: Import products from file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      imported:
+                        type: integer
+                      failed:
+                        type: integer
+
+  /api/v1/products/export:
+    get:
+      tags:
+        - Import/Export
+      summary: Export products to CSV/XLSX
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV/XLSX file
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+
+  /api/v1/products/import/template:
+    get:
+      tags:
+        - Import/Export
+      summary: Download product import template
+      responses:
+        '200':
+          description: Template file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+
+  /api/v1/products/summary:
+    get:
+      tags:
+        - Import/Export
+      summary: Get product summary statistics
+      responses:
+        '200':
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalProducts:
+                        type: integer
+                      byType:
+                        type: object
+                      byStatus:
+                        type: object
+
+  /api/v1/products/validate-codes:
+    post:
+      tags:
+        - Import/Export
+      summary: Validate product codes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                codes:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code:
+                          type: string
+                        valid:
+                          type: boolean
+                        exists:
+                          type: boolean
+
+  /api/v1/products/search:
+    get:
+      tags:
+        - Import/Export
+      summary: Search products
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+
+  /api/v1/products/by-type:
+    get:
+      tags:
+        - Import/Export
+      summary: Get products by type
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [FG, SEMI, RAW, PACKAGING, SPAREPART, SUPPORT]
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+
+  # ========== BOM ==========
+  /api/v1/boms:
+    get:
+      tags:
+        - BOM
+      summary: List BoMs
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, active, inactive]
+        - $ref: '#/components/parameters/searchParam'
+        - $ref: '#/components/parameters/sortByParam'
+        - $ref: '#/components/parameters/sortOrderParam'
+      responses:
+        '200':
+          description: Paginated BoM list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BoM'
+    post:
+      tags:
+        - BOM
+      summary: Create BoM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBoMRequest'
+      responses:
+        '201':
+          description: BoM created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BoM'
+
+  /api/v1/products/{productId}/bom:
+    parameters:
+      - $ref: '#/components/parameters/productIdParam'
+    get:
+      tags:
+        - BOM
+      summary: Get BoM by product
+      responses:
+        '200':
+          description: BoM detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BoM'
+        '404':
+          description: BoM not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - BOM
+      summary: Create BoM for product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBoMRequest'
+      responses:
+        '201':
+          description: BoM created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BoM'
+
+  /api/v1/products/{productId}/bom/status:
+    parameters:
+      - $ref: '#/components/parameters/productIdParam'
+    patch:
+      tags:
+        - BOM
+      summary: Update BoM status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBoMStatusRequest'
+      responses:
+        '200':
+          description: BoM status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BoM'
+
+  /api/v1/products/{productId}/bom/items:
+    parameters:
+      - $ref: '#/components/parameters/productIdParam'
+    post:
+      tags:
+        - BOM
+      summary: Add BoM item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddBoMItemRequest'
+      responses:
+        '200':
+          description: BoM updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BoM'
+
+  /api/v1/products/{productId}/bom/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/productIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    put:
+      tags:
+        - BOM
+      summary: Update BoM item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBoMItemRequest'
+      responses:
+        '200':
+          description: BoM item updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BoMItem'
+    delete:
+      tags:
+        - BOM
+      summary: Remove BoM item
+      responses:
+        '200':
+          description: BoM item removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/products/{productId}/bom/materials:
+    parameters:
+      - $ref: '#/components/parameters/productIdParam'
+    get:
+      tags:
+        - Import/Export
+      summary: Get BoM materials
+      responses:
+        '200':
+          description: Material list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+
+  /api/v1/boms/import:
+    post:
+      tags:
+        - Import/Export
+      summary: Import BoMs from file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      imported:
+                        type: integer
+                      failed:
+                        type: integer
+
+  /api/v1/boms/export:
+    get:
+      tags:
+        - Import/Export
+      summary: Export BoMs to CSV/XLSX
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV/XLSX file
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+
+  /api/v1/boms/import/template:
+    get:
+      tags:
+        - Import/Export
+      summary: Download BoM import template
+      responses:
+        '200':
+          description: Template file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+
+  # ========== Production Planning ==========
+  /api/v1/production-plans:
+    get:
+      tags:
+        - Production Planning
+      summary: List production plans
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, submitted, approved, rejected, in_progress, completed, cancelled, edit_requested]
+        - name: plan_date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: plan_date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/sortByParam'
+        - $ref: '#/components/parameters/sortOrderParam'
+      responses:
+        '200':
+          description: Paginated plan list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProductionPlan'
+    post:
+      tags:
+        - Production Planning
+      summary: Create production plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductionPlanRequest'
+      responses:
+        '201':
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production-plans/{id}:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    get:
+      tags:
+        - Production Planning
+      summary: Get plan by ID
+      responses:
+        '200':
+          description: Plan detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+    put:
+      tags:
+        - Production Planning
+      summary: Update plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductionPlanRequest'
+      responses:
+        '200':
+          description: Plan updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+    delete:
+      tags:
+        - Production Planning
+      summary: Delete plan
+      responses:
+        '200':
+          description: Plan deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/production-plans/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Submit plan for approval
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitPlanRequest'
+      responses:
+        '200':
+          description: Plan submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production-plans/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Approve plan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovePlanRequest'
+      responses:
+        '200':
+          description: Plan approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production-plans/{id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Reject plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectPlanRequest'
+      responses:
+        '200':
+          description: Plan rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production-plans/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Cancel plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelPlanRequest'
+      responses:
+        '200':
+          description: Plan cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production-plans/{id}/request-edit:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Request edit for plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestEditRequest'
+      responses:
+        '200':
+          description: Edit requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production-plans/{id}/approval-history:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    get:
+      tags:
+        - Production Planning
+      summary: Get approval history
+      responses:
+        '200':
+          description: Approval history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalHistory'
+
+  /api/v1/production-plans/{id}/items:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Add plan item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPlanItemRequest'
+      responses:
+        '200':
+          description: Plan updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production-plans/{id}/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    put:
+      tags:
+        - Production Planning
+      summary: Update plan item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlanItemRequest'
+      responses:
+        '200':
+          description: Plan item updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlanItem'
+    delete:
+      tags:
+        - Production Planning
+      summary: Remove plan item
+      responses:
+        '200':
+          description: Plan item removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/production-plans/{id}/items/{itemId}/priorities:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    put:
+      tags:
+        - Production Planning
+      summary: Update material priorities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMaterialPrioritiesRequest'
+      responses:
+        '200':
+          description: Priorities updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProductionPlanItem'
+
+  /api/v1/production-plans/{id}/material-requirements:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    get:
+      tags:
+        - Production Planning
+      summary: Get material requirements
+      responses:
+        '200':
+          description: Material requirements list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaterialRequirement'
+
+  /api/v1/production-plans/{id}/items/{itemId}/material-requirements:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    get:
+      tags:
+        - Production Planning
+      summary: Get item material requirements
+      responses:
+        '200':
+          description: Material requirements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaterialRequirement'
+
+  /api/v1/production-plans/{id}/material-requirements/refresh:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Refresh material requirements
+      responses:
+        '200':
+          description: Material requirements refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaterialRequirement'
+
+  /api/v1/production-plans/{id}/material-requirements/shortage-summary:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    get:
+      tags:
+        - Production Planning
+      summary: Get material shortage summary
+      responses:
+        '200':
+          description: Shortage data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalShortages:
+                        type: integer
+                      criticalMaterials:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MaterialRequirement'
+
+  /api/v1/material-requirement-items/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    patch:
+      tags:
+        - Production Planning
+      summary: Update material requirement item status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMrItemStatusRequest'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/MaterialRequirement'
+
+  /api/v1/production-plans/{id}/items/{itemId}/priority-template:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    get:
+      tags:
+        - Production Planning
+      summary: Get priority template
+      responses:
+        '200':
+          description: Template data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+
+  /api/v1/production-plans/{id}/items/{itemId}/priority-weights:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    put:
+      tags:
+        - Production Planning
+      summary: Set priority weights
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPriorityWeightsRequest'
+      responses:
+        '200':
+          description: Weights updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+
+  /api/v1/production-plans/{id}/items/{itemId}/priority-weights/auto-distribute:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Auto-distribute priority weights
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoDistributeWeightsRequest'
+      responses:
+        '200':
+          description: Weights distributed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+
+  /api/v1/production-plans/{id}/items/{itemId}/priority-weights/validate:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    post:
+      tags:
+        - Production Planning
+      summary: Validate priority weights
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPriorityWeightsRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      valid:
+                        type: boolean
+                      errors:
+                        type: array
+                        items:
+                          type: string
+
+  /api/v1/production-plans/{id}/critical-materials:
+    parameters:
+      - $ref: '#/components/parameters/planIdParam'
+    get:
+      tags:
+        - Production Planning
+      summary: Get critical materials
+      responses:
+        '200':
+          description: Critical materials list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaterialRequirement'
+
+  # ========== Production (Work Orders) ==========
+  /api/v1/production/work-orders:
+    get:
+      tags:
+        - Production
+      summary: List work orders
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, released, in_progress, marked_qc, qc_in_progress, qc_passed, qc_failed, completed, cancelled]
+        - name: plan_id
+          in: query
+          schema:
+            type: string
+        - name: product_id
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/searchParam'
+        - name: target_date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: target_date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/sortByParam'
+        - $ref: '#/components/parameters/sortOrderParam'
+      responses:
+        '200':
+          description: Paginated WO list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WorkOrder'
+    post:
+      tags:
+        - Production
+      summary: Create work order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWORequest'
+      responses:
+        '201':
+          description: WO created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+
+  /api/v1/production/work-orders/available-plans:
+    get:
+      tags:
+        - Production
+      summary: Get available plans for WO creation
+      responses:
+        '200':
+          description: Plan list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductionPlan'
+
+  /api/v1/production/work-orders/{woId}:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get WO detail
+      responses:
+        '200':
+          description: WO detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+    put:
+      tags:
+        - Production
+      summary: Update WO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWORequest'
+      responses:
+        '200':
+          description: WO updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+
+  /api/v1/production/work-orders/{woId}/release:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    post:
+      tags:
+        - Production
+      summary: Release WO
+      responses:
+        '200':
+          description: WO released
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+
+  /api/v1/production/work-orders/{woId}/start:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    post:
+      tags:
+        - Production
+      summary: Start WO
+      responses:
+        '200':
+          description: WO started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+
+  /api/v1/production/work-orders/{woId}/mark-qc:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    post:
+      tags:
+        - Production
+      summary: Mark WO for QC
+      responses:
+        '200':
+          description: WO marked for QC
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+
+  /api/v1/production/work-orders/{woId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    post:
+      tags:
+        - Production
+      summary: Complete WO
+      responses:
+        '200':
+          description: WO completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+
+  /api/v1/production/work-orders/{woId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    post:
+      tags:
+        - Production
+      summary: Cancel WO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelWORequest'
+      responses:
+        '200':
+          description: WO cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkOrder'
+
+  # ========== WO Steps ==========
+  /api/v1/production/work-orders/{woId}/steps:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    get:
+      tags:
+        - Production
+      summary: List WO steps
+      responses:
+        '200':
+          description: Step list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WOStep'
+    post:
+      tags:
+        - Production
+      summary: Add WO step
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WOStep'
+      responses:
+        '200':
+          description: Step added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WOStep'
+
+  /api/v1/production/work-orders/{woId}/steps/{stepId}:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+      - $ref: '#/components/parameters/stepIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get step detail
+      responses:
+        '200':
+          description: Step detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WOStep'
+    put:
+      tags:
+        - Production
+      summary: Update step
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WOStep'
+      responses:
+        '200':
+          description: Step updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WOStep'
+    delete:
+      tags:
+        - Production
+      summary: Delete step
+      responses:
+        '200':
+          description: Step deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/production/work-orders/{woId}/steps/reorder:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    put:
+      tags:
+        - Production
+      summary: Reorder steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - stepIds
+              properties:
+                stepIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Steps reordered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WOStep'
+
+  # ========== Progress Tracking ==========
+  /api/v1/production/work-orders/{woId}/progress:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get progress overview
+      responses:
+        '200':
+          description: Progress summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WOProgress'
+    post:
+      tags:
+        - Production
+      summary: Update progress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quantity
+              properties:
+                quantity:
+                  type: number
+      responses:
+        '200':
+          description: Progress updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WOProgress'
+
+  /api/v1/production/work-orders/{woId}/progress/history:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get progress history
+      responses:
+        '200':
+          description: History list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WOProgress'
+
+  /api/v1/production/work-orders/{woId}/steps/{stepId}/start:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+      - $ref: '#/components/parameters/stepIdParam'
+    post:
+      tags:
+        - Production
+      summary: Start step
+      responses:
+        '200':
+          description: Step started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WOStep'
+
+  /api/v1/production/work-orders/{woId}/steps/{stepId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+      - $ref: '#/components/parameters/stepIdParam'
+    post:
+      tags:
+        - Production
+      summary: Complete step
+      responses:
+        '200':
+          description: Step completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WOStep'
+
+  # ========== Progress Photos ==========
+  /api/v1/production/progress/{progressId}/photos:
+    parameters:
+      - $ref: '#/components/parameters/progressIdParam'
+    get:
+      tags:
+        - Production
+      summary: List progress photos
+      responses:
+        '200':
+          description: Photo list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProgressPhoto'
+    post:
+      tags:
+        - Production
+      summary: Upload progress photo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                caption:
+                  type: string
+      responses:
+        '200':
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProgressPhoto'
+
+  /api/v1/production/progress/{progressId}/photos/{photoId}:
+    parameters:
+      - $ref: '#/components/parameters/progressIdParam'
+      - $ref: '#/components/parameters/photoIdParam'
+    patch:
+      tags:
+        - Production
+      summary: Update photo caption
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - caption
+              properties:
+                caption:
+                  type: string
+      responses:
+        '200':
+          description: Caption updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProgressPhoto'
+    delete:
+      tags:
+        - Production
+      summary: Delete photo
+      responses:
+        '200':
+          description: Photo deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/production/progress/{progressId}/photos/upload-url:
+    parameters:
+      - $ref: '#/components/parameters/progressIdParam'
+    post:
+      tags:
+        - Production
+      summary: Generate upload URL for photo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - filename
+                - contentType
+              properties:
+                filename:
+                  type: string
+                contentType:
+                  type: string
+      responses:
+        '200':
+          description: Upload URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      uploadUrl:
+                        type: string
+                      key:
+                        type: string
+                      uploadId:
+                        type: string
+
+  /api/v1/production/progress/{progressId}/photos/confirm:
+    parameters:
+      - $ref: '#/components/parameters/progressIdParam'
+    post:
+      tags:
+        - Production
+      summary: Confirm photo upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - uploadId
+                - key
+              properties:
+                uploadId:
+                  type: string
+                key:
+                  type: string
+      responses:
+        '200':
+          description: Upload confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ProgressPhoto'
+
+  /api/v1/production/photos/{photoId}/file:
+    parameters:
+      - $ref: '#/components/parameters/photoIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get photo file
+      responses:
+        '200':
+          description: Image file
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+
+  # ========== QC Sessions ==========
+  /api/v1/production/qc-sessions:
+    get:
+      tags:
+        - Production
+      summary: List QC sessions
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [in_progress, completed]
+        - name: result
+          in: query
+          schema:
+            type: string
+            enum: [pass, fail, pending]
+      responses:
+        '200':
+          description: QC session list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/QCSession'
+
+  /api/v1/production/qc-sessions/{sessionId}:
+    parameters:
+      - $ref: '#/components/parameters/sessionIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get QC session detail
+      responses:
+        '200':
+          description: QC session detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCSession'
+
+  /api/v1/production/work-orders/{woId}/qc/start:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    post:
+      tags:
+        - Production
+      summary: Start QC session for WO
+      responses:
+        '200':
+          description: QC session started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCSession'
+
+  /api/v1/production/qc-sessions/{sessionId}/wo-progress:
+    parameters:
+      - $ref: '#/components/parameters/sessionIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get WO progress for QC
+      responses:
+        '200':
+          description: Progress data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WOProgress'
+
+  /api/v1/production/qc-sessions/{sessionId}/findings:
+    parameters:
+      - $ref: '#/components/parameters/sessionIdParam'
+    get:
+      tags:
+        - Production
+      summary: List QC findings
+      responses:
+        '200':
+          description: Finding list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QCFinding'
+    post:
+      tags:
+        - Production
+      summary: Add QC finding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddFindingRequest'
+      responses:
+        '200':
+          description: Finding added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCFinding'
+
+  /api/v1/production/qc-sessions/{sessionId}/pass:
+    parameters:
+      - $ref: '#/components/parameters/sessionIdParam'
+    post:
+      tags:
+        - Production
+      summary: Submit QC pass
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QCNotesRequest'
+      responses:
+        '200':
+          description: QC passed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCSession'
+
+  /api/v1/production/qc-sessions/{sessionId}/fail:
+    parameters:
+      - $ref: '#/components/parameters/sessionIdParam'
+    post:
+      tags:
+        - Production
+      summary: Submit QC fail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QCNotesRequest'
+      responses:
+        '200':
+          description: QC failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCSession'
+
+  /api/v1/production/work-orders/{woId}/rework-notes:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get rework notes
+      responses:
+        '200':
+          description: Rework notes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QCFinding'
+
+  /api/v1/production/work-orders/{woId}/rework-status:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    get:
+      tags:
+        - Production
+      summary: Check rework status
+      responses:
+        '200':
+          description: Rework status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      allResolved:
+                        type: boolean
+                      pendingFindings:
+                        type: integer
+
+  /api/v1/production/work-orders/{woId}/completion-status:
+    parameters:
+      - $ref: '#/components/parameters/woIdParam'
+    get:
+      tags:
+        - Production
+      summary: Check completion status
+      responses:
+        '200':
+          description: Completion status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      isCompleted:
+                        type: boolean
+                      pendingSteps:
+                        type: array
+                        items:
+                          type: string
+
+  # ========== QC Findings ==========
+  /api/v1/production/qc-findings/{findingId}:
+    parameters:
+      - $ref: '#/components/parameters/findingIdParam'
+    get:
+      tags:
+        - Production
+      summary: Get finding detail
+      responses:
+        '200':
+          description: Finding detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCFinding'
+    put:
+      tags:
+        - Production
+      summary: Update finding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                reworkNotes:
+                  type: string
+      responses:
+        '200':
+          description: Finding updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCFinding'
+    delete:
+      tags:
+        - Production
+      summary: Delete finding
+      responses:
+        '200':
+          description: Finding deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/production/qc-findings/{findingId}/photos:
+    parameters:
+      - $ref: '#/components/parameters/findingIdParam'
+    get:
+      tags:
+        - Production
+      summary: List finding photos
+      responses:
+        '200':
+          description: Photo list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QCFindingPhoto'
+    post:
+      tags:
+        - Production
+      summary: Upload finding photo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                type:
+                  type: string
+                  enum: [finding, rework]
+      responses:
+        '200':
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCFindingPhoto'
+
+  /api/v1/production/qc-findings/{findingId}/photos/{photoId}:
+    parameters:
+      - $ref: '#/components/parameters/findingIdParam'
+      - name: photoId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags:
+        - Production
+      summary: Delete finding photo
+      responses:
+        '200':
+          description: Photo deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/production/qc-findings/{findingId}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/findingIdParam'
+    post:
+      tags:
+        - Production
+      summary: Resolve finding
+      responses:
+        '200':
+          description: Finding resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCFinding'
+
+  /api/v1/production/qc-findings/{findingId}/rework-photos:
+    parameters:
+      - $ref: '#/components/parameters/findingIdParam'
+    post:
+      tags:
+        - Production
+      summary: Upload rework photo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/QCFindingPhoto'
+
+  # ========== Purchase Requests ==========
+  /api/v1/purchase-requests:
+    get:
+      tags:
+        - Purchasing
+      summary: List purchase requests
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, submitted, approved, rejected, processing, do_issued, resubmitted, cancelled]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high, urgent]
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+        - $ref: '#/components/parameters/sortByParam'
+        - $ref: '#/components/parameters/sortOrderParam'
+      responses:
+        '200':
+          description: Paginated PR list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PurchaseRequest'
+    post:
+      tags:
+        - Purchasing
+      summary: Create purchase request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePRRequest'
+      responses:
+        '201':
+          description: PR created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    get:
+      tags:
+        - Purchasing
+      summary: Get PR by ID
+      responses:
+        '200':
+          description: PR detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+    put:
+      tags:
+        - Purchasing
+      summary: Update PR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePRRequest'
+      responses:
+        '200':
+          description: PR updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+    delete:
+      tags:
+        - Purchasing
+      summary: Delete PR
+      responses:
+        '200':
+          description: PR deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/purchase-requests/{id}/items:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Add PR item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPRItemRequest'
+      responses:
+        '200':
+          description: PR updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    put:
+      tags:
+        - Purchasing
+      summary: Update PR item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePRItemRequest'
+      responses:
+        '200':
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PRItem'
+    delete:
+      tags:
+        - Purchasing
+      summary: Delete PR item
+      responses:
+        '200':
+          description: Item deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/purchase-requests/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Submit PR
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitPRRequest'
+      responses:
+        '200':
+          description: PR submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Approve PR
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovePRRequest'
+      responses:
+        '200':
+          description: PR approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Reject PR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectPRRequest'
+      responses:
+        '200':
+          description: PR rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/resubmit:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Resubmit PR
+      responses:
+        '200':
+          description: PR resubmitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/approval-history:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    get:
+      tags:
+        - Purchasing
+      summary: Get approval history
+      responses:
+        '200':
+          description: Approval history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalHistory'
+
+  /api/v1/purchase-requests/{id}/lead-time:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    patch:
+      tags:
+        - Purchasing
+      summary: Update lead time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLeadTimeRequest'
+      responses:
+        '200':
+          description: Lead time updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/status/processing:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Mark PR as processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkAsProcessingRequest'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/status/do-issued:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Mark PR as DO issued
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkAsDOIssuedRequest'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/notes:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    post:
+      tags:
+        - Purchasing
+      summary: Add note to PR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddNoteRequest'
+      responses:
+        '200':
+          description: Note added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/purchase-requests/{id}/timeline:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    get:
+      tags:
+        - Purchasing
+      summary: Get PR status timeline
+      responses:
+        '200':
+          description: Timeline data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                        timestamp:
+                          type: string
+                          format: date-time
+                        notes:
+                          type: string
+
+  # ========== Delivery Orders (Purchasing) ==========
+  /api/v1/purchase-requests/{prId}/delivery-orders:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+    get:
+      tags:
+        - Purchasing
+      summary: List DOs for PR
+      responses:
+        '200':
+          description: DO list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DeliveryOrder'
+    post:
+      tags:
+        - Purchasing
+      summary: Create DO for PR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - do_number
+                - do_date
+                - items
+              properties:
+                do_number:
+                  type: string
+                do_date:
+                  type: string
+                  format: date
+                items:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: DO created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/DeliveryOrder'
+
+  /api/v1/delivery-orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idParam'
+    get:
+      tags:
+        - Purchasing
+      summary: Get DO by ID
+      responses:
+        '200':
+          description: DO detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/DeliveryOrder'
+    delete:
+      tags:
+        - Purchasing
+      summary: Delete DO
+      responses:
+        '200':
+          description: DO deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/purchase-requests/{prId}/items/{prItemId}/do-summary:
+    parameters:
+      - $ref: '#/components/parameters/prIdParam'
+      - name: prItemId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Purchasing
+      summary: Get DO summary for PR item
+      responses:
+        '200':
+          description: DO summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalQuantityOrdered:
+                        type: number
+                      totalQuantityReceived:
+                        type: number
+                      pendingQuantity:
+                        type: number
+
+  # ========== Purchasing Reports ==========
+  /api/v1/reports/pr-aging:
+    get:
+      tags:
+        - Purchasing
+      summary: Get PR aging report
+      parameters:
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+      responses:
+        '200':
+          description: Aging report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        prId:
+                          type: string
+                        prNumber:
+                          type: string
+                        age:
+                          type: integer
+                        status:
+                          type: string
+
+  /api/v1/reports/pr-status-summary:
+    get:
+      tags:
+        - Purchasing
+      summary: Get PR status summary
+      responses:
+        '200':
+          description: Status summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      byStatus:
+                        type: object
+                      totalPRs:
+                        type: integer
+
+  # ========== Warehouse - Stock ==========
+  /api/v1/warehouse/stock:
+    get:
+      tags:
+        - Warehouse
+      summary: List stock
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: lowStock
+          in: query
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/searchParam'
+      responses:
+        '200':
+          description: Stock list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Stock'
+
+  /api/v1/warehouse/stock/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/productIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get stock detail
+      responses:
+        '200':
+          description: Stock detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Stock'
+
+  /api/v1/warehouse/stock/alerts/low-stock:
+    get:
+      tags:
+        - Warehouse
+      summary: Get low stock alerts
+      responses:
+        '200':
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Stock'
+
+  /api/v1/warehouse/stock/{productId}/safety-stock:
+    parameters:
+      - $ref: '#/components/parameters/productIdParam'
+    patch:
+      tags:
+        - Warehouse
+      summary: Update safety stock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SafetyStockUpdateRequest'
+      responses:
+        '200':
+          description: Safety stock updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Stock'
+
+  # ========== Warehouse - Goods Receipt ==========
+  /api/v1/warehouse/goods-receipts:
+    get:
+      tags:
+        - Warehouse
+      summary: List goods receipts
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: pr_id
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+      responses:
+        '200':
+          description: GR list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/GoodsReceipt'
+    post:
+      tags:
+        - Warehouse
+      summary: Create goods receipt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGRRequest'
+      responses:
+        '201':
+          description: GR created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsReceipt'
+
+  /api/v1/warehouse/goods-receipts/available-prs:
+    get:
+      tags:
+        - Warehouse
+      summary: Get available PRs for GR
+      responses:
+        '200':
+          description: PR list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PurchaseRequest'
+
+  /api/v1/warehouse/goods-receipts/pr-items/{prId}:
+    parameters:
+      - name: prId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Warehouse
+      summary: Get PR items for GR
+      responses:
+        '200':
+          description: PR items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PRItem'
+
+  /api/v1/warehouse/goods-receipts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get GR by ID
+      responses:
+        '200':
+          description: GR detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsReceipt'
+    put:
+      tags:
+        - Warehouse
+      summary: Update GR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGRRequest'
+      responses:
+        '200':
+          description: GR updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsReceipt'
+
+  /api/v1/warehouse/goods-receipts/{id}/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    put:
+      tags:
+        - Warehouse
+      summary: Update GR item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGRItemRequest'
+      responses:
+        '200':
+          description: GR item updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GRItem'
+
+  /api/v1/warehouse/goods-receipts/{id}/start-inspection:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Start inspection for GR
+      responses:
+        '200':
+          description: Inspection started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsReceipt'
+
+  /api/v1/warehouse/goods-receipts/{id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Complete GR
+      responses:
+        '200':
+          description: GR completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsReceipt'
+
+  /api/v1/warehouse/goods-receipts/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Cancel GR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelGRRequest'
+      responses:
+        '200':
+          description: GR cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsReceipt'
+
+  # ========== Warehouse - Inspections ==========
+  /api/v1/warehouse/inspections:
+    get:
+      tags:
+        - Warehouse
+      summary: List inspections
+      responses:
+        '200':
+          description: Inspection list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Inspection'
+    post:
+      tags:
+        - Warehouse
+      summary: Create inspection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Inspection'
+      responses:
+        '201':
+          description: Inspection created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Inspection'
+
+  /api/v1/warehouse/inspections/pending:
+    get:
+      tags:
+        - Warehouse
+      summary: Get pending inspections
+      responses:
+        '200':
+          description: Pending list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Inspection'
+
+  /api/v1/warehouse/inspections/{id}:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get inspection by ID
+      responses:
+        '200':
+          description: Inspection detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Inspection'
+    put:
+      tags:
+        - Warehouse
+      summary: Update inspection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Inspection updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Inspection'
+
+  /api/v1/warehouse/inspections/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Submit inspection
+      responses:
+        '200':
+          description: Inspection submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Inspection'
+
+  /api/v1/warehouse/inspections/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Approve inspection
+      responses:
+        '200':
+          description: Inspection approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Inspection'
+
+  /api/v1/warehouse/inspections/{id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Reject inspection
+      responses:
+        '200':
+          description: Inspection rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Inspection'
+
+  /api/v1/warehouse/inspections/{id}/photos:
+    parameters:
+      - $ref: '#/components/parameters/grIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Upload inspection photo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/InspectionPhoto'
+
+  # ========== Warehouse - BAST Inbound ==========
+  /api/v1/warehouse/bast-inbound:
+    get:
+      tags:
+        - Warehouse
+      summary: List BAST inbound
+      responses:
+        '200':
+          description: BAST list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BASTInbound'
+    post:
+      tags:
+        - Warehouse
+      summary: Generate BAST
+      responses:
+        '200':
+          description: BAST generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BASTInbound'
+
+  /api/v1/warehouse/bast-inbound/by-gr/{grId}:
+    parameters:
+      - name: grId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Warehouse
+      summary: Get BAST by GR
+      responses:
+        '200':
+          description: BAST detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BASTInbound'
+
+  /api/v1/warehouse/bast-inbound/{id}:
+    parameters:
+      - $ref: '#/components/parameters/bastIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get BAST by ID
+      responses:
+        '200':
+          description: BAST detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BASTInbound'
+
+  /api/v1/warehouse/bast-inbound/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/bastIdParam'
+    patch:
+      tags:
+        - Warehouse
+      summary: Update BAST status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [generated, signed]
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BASTInbound'
+
+  /api/v1/warehouse/bast-inbound/{id}/export:
+    parameters:
+      - $ref: '#/components/parameters/bastIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Export BAST PDF
+      responses:
+        '200':
+          description: PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ========== Warehouse - Goods Issue ==========
+  /api/v1/warehouse/goods-issues/available-wos:
+    get:
+      tags:
+        - Warehouse
+      summary: Get available WOs for GI
+      responses:
+        '200':
+          description: WO list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkOrder'
+
+  /api/v1/warehouse/goods-issues:
+    get:
+      tags:
+        - Warehouse
+      summary: List goods issues
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: wo_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: GI list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/GoodsIssue'
+    post:
+      tags:
+        - Warehouse
+      summary: Create goods issue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - wo_id
+                - items
+              properties:
+                wo_id:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: GI created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+
+  /api/v1/warehouse/goods-issues/{giId}:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get GI by ID
+      responses:
+        '200':
+          description: GI detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+    put:
+      tags:
+        - Warehouse
+      summary: Update GI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: GI updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+
+  /api/v1/warehouse/goods-issues/{giId}/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    patch:
+      tags:
+        - Warehouse
+      summary: Update GI item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantityIssued:
+                  type: number
+      responses:
+        '200':
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GIItem'
+
+  /api/v1/warehouse/goods-issues/{giId}/submit:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Submit GI for approval
+      responses:
+        '200':
+          description: GI submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+
+  /api/v1/warehouse/goods-issues/{giId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Approve GI
+      responses:
+        '200':
+          description: GI approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+
+  /api/v1/warehouse/goods-issues/{giId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Reject GI
+      responses:
+        '200':
+          description: GI rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+
+  /api/v1/warehouse/goods-issues/{giId}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Confirm GI
+      responses:
+        '200':
+          description: GI confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+
+  /api/v1/warehouse/goods-issues/{giId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Cancel GI
+      responses:
+        '200':
+          description: GI cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/GoodsIssue'
+
+  /api/v1/warehouse/goods-issues/{giId}/print:
+    parameters:
+      - $ref: '#/components/parameters/giIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Print GI document
+      responses:
+        '200':
+          description: PDF document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ========== Warehouse - Finished Goods Receipt ==========
+  /api/v1/warehouse/finished-goods-receipts:
+    get:
+      tags:
+        - Warehouse
+      summary: List FG receipts
+      responses:
+        '200':
+          description: FG receipt list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FinishedGoodsReceipt'
+    post:
+      tags:
+        - Warehouse
+      summary: Create manual FG receipt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - wo_id
+                - quantity
+              properties:
+                wo_id:
+                  type: string
+                quantity:
+                  type: number
+      responses:
+        '201':
+          description: FG receipt created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/FinishedGoodsReceipt'
+
+  /api/v1/warehouse/finished-goods-receipts/{receiptId}:
+    parameters:
+      - name: receiptId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Warehouse
+      summary: Get FG receipt
+      responses:
+        '200':
+          description: FG receipt detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/FinishedGoodsReceipt'
+
+  # ========== Warehouse - Delivery Orders ==========
+  /api/v1/warehouse/delivery-orders/available-stock:
+    get:
+      tags:
+        - Warehouse
+      summary: Get available FG stock for DO
+      responses:
+        '200':
+          description: Stock list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Stock'
+
+  /api/v1/warehouse/delivery-orders:
+    get:
+      tags:
+        - Warehouse
+      summary: List DOs
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+      responses:
+        '200':
+          description: DO list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WarehouseDO'
+    post:
+      tags:
+        - Warehouse
+      summary: Create DO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - do_number
+                - do_date
+                - items
+              properties:
+                do_number:
+                  type: string
+                do_date:
+                  type: string
+                  format: date
+                items:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: DO created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WarehouseDO'
+
+  /api/v1/warehouse/delivery-orders/{doId}:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get DO by ID
+      responses:
+        '200':
+          description: DO detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WarehouseDO'
+    put:
+      tags:
+        - Warehouse
+      summary: Update DO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                do_date:
+                  type: string
+                  format: date
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: DO updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WarehouseDO'
+
+  /api/v1/warehouse/delivery-orders/{doId}/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+      - $ref: '#/components/parameters/itemIdParam'
+    patch:
+      tags:
+        - Warehouse
+      summary: Update DO item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: number
+      responses:
+        '200':
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WarehouseDOItem'
+
+  /api/v1/warehouse/delivery-orders/{doId}/release:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Release DO
+      responses:
+        '200':
+          description: DO released
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WarehouseDO'
+
+  /api/v1/warehouse/delivery-orders/{doId}/status:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+    patch:
+      tags:
+        - Warehouse
+      summary: Update DO status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [draft, released, partially_delivered, delivered, cancelled]
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WarehouseDO'
+
+  /api/v1/warehouse/delivery-orders/{doId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Cancel DO
+      responses:
+        '200':
+          description: DO cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WarehouseDO'
+
+  /api/v1/warehouse/delivery-orders/{doId}/print:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+    post:
+      tags:
+        - Warehouse
+      summary: Print DO document
+      responses:
+        '200':
+          description: PDF document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/warehouse/delivery-orders/{doId}/packing-list:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Export packing list
+      responses:
+        '200':
+          description: Packing list file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+
+  # ========== Warehouse - BAST Outbound ==========
+  /api/v1/warehouse/bast-outbound/pending-dos:
+    get:
+      tags:
+        - Warehouse
+      summary: Get pending DOs for BAST
+      responses:
+        '200':
+          description: DO list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WarehouseDO'
+
+  /api/v1/warehouse/bast-outbound/by-do/{doId}:
+    parameters:
+      - $ref: '#/components/parameters/doIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get BAST by DO
+      responses:
+        '200':
+          description: BAST detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BASTOutbound'
+
+  /api/v1/warehouse/bast-outbound:
+    get:
+      tags:
+        - Warehouse
+      summary: List BAST outbound
+      responses:
+        '200':
+          description: BAST list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BASTOutbound'
+    post:
+      tags:
+        - Warehouse
+      summary: Upload BAST
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                do_id:
+                  type: string
+      responses:
+        '201':
+          description: BAST uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BASTOutbound'
+
+  /api/v1/warehouse/bast-outbound/{bastId}:
+    parameters:
+      - $ref: '#/components/parameters/bastIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Get BAST by ID
+      responses:
+        '200':
+          description: BAST detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BASTOutbound'
+
+  /api/v1/warehouse/bast-outbound/{bastId}/download:
+    parameters:
+      - $ref: '#/components/parameters/bastIdParam'
+    get:
+      tags:
+        - Warehouse
+      summary: Download BAST
+      responses:
+        '200':
+          description: BAST file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ========== Warehouse - Reports ==========
+  /api/v1/warehouse/reports/dashboard:
+    get:
+      tags:
+        - Warehouse
+      summary: Dashboard summary
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      stockValue:
+                        type: number
+                      pendingGRs:
+                        type: integer
+                      pendingGIs:
+                        type: integer
+                      lowStockItems:
+                        type: integer
+
+  /api/v1/warehouse/reports/stock:
+    get:
+      tags:
+        - Warehouse
+      summary: Stock report
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: location
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stock report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Stock'
+
+  /api/v1/warehouse/reports/stock/export:
+    get:
+      tags:
+        - Warehouse
+      summary: Export stock report
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV/XLSX file
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+
+  /api/v1/warehouse/reports/stock-movement:
+    get:
+      tags:
+        - Warehouse
+      summary: Stock movement report
+      parameters:
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+        - name: productId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Movement report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        type:
+                          type: string
+                          enum: [receipt, issue, adjustment]
+                        productId:
+                          type: string
+                        quantity:
+                          type: number
+                        reference:
+                          type: string
+
+  # ========== Dashboard ==========
+  /api/v1/dashboard/summary:
+    get:
+      tags:
+        - Dashboard
+      summary: Get dashboard summary
+      parameters:
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+        - name: planId
+          in: query
+          schema:
+            type: string
+        - name: periodComparison
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Summary data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/DashboardSummary'
+
+  /api/v1/dashboard/production-kpis:
+    get:
+      tags:
+        - Dashboard
+      summary: Get production KPIs
+      parameters:
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+        - name: planId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Production KPIs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/KPIResponse'
+
+  /api/v1/dashboard/delivery-kpis:
+    get:
+      tags:
+        - Dashboard
+      summary: Get delivery KPIs
+      parameters:
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+        - name: planId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Delivery KPIs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/KPIResponse'
+
+  /api/v1/dashboard/inventory-kpis:
+    get:
+      tags:
+        - Dashboard
+      summary: Get inventory KPIs
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Inventory KPIs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/KPIResponse'
+
+  /api/v1/dashboard/purchasing-kpis:
+    get:
+      tags:
+        - Dashboard
+      summary: Get purchasing KPIs
+      parameters:
+        - $ref: '#/components/parameters/startDateParam'
+        - $ref: '#/components/parameters/endDateParam'
+      responses:
+        '200':
+          description: Purchasing KPIs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/KPIResponse'
+
+  /api/v1/dashboard/projects:
+    get:
+      tags:
+        - Dashboard
+      summary: Get project tracking
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: stage
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+      responses:
+        '200':
+          description: Project list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        status:
+                          type: string
+                        progress:
+                          type: number
+
+  /api/v1/dashboard/alerts:
+    get:
+      tags:
+        - Dashboard
+      summary: Get alerts
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [production, inventory, purchasing, quality]
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+      responses:
+        '200':
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+
+  /api/v1/dashboard/comparison:
+    get:
+      tags:
+        - Dashboard
+      summary: Get period comparison
+      parameters:
+        - name: currentStart
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: currentEnd
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: previousStart
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: previousEnd
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: planId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Comparison data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      currentPeriod:
+                        type: object
+                      previousPeriod:
+                        type: object
+                      change:
+                        type: object
