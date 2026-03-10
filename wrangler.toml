@@ -1,10 +1,25 @@
 name = "apex-design-system"
-compatibility_date = "2024-01-01"
-pages_build_output_dir = "dist"
+main = "./worker.js"
+compatibility_date = "2025-09-27"
+compatibility_flags = ["nodejs_compat"]
 
+# Account ID - Devops.rightjet@gmail.com
+account_id = "9268faf8a2f7980268adc029564e1601"
+
+# Enable logging and monitoring
+[observability]
+enabled = true
+
+# Static assets configuration for SPA
+# The 'binding' field creates env.ASSETS for serving static files
 [assets]
 directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
 
+# Environment variables (build-time)
+# For runtime secrets, use: wrangler secret put <NAME>
+# Or set in Cloudflare Dashboard: Workers > apex-design-system > Settings > Variables
 [vars]
 VITE_USE_MOCK_DATA = "false"
 VITE_API_URL = ""
