@@ -3,8 +3,10 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import type { IncomingMessage, ServerResponse } from "http"
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), cloudflare()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -26,7 +28,7 @@ export default defineConfig({
               const modifiedCookies = setCookie.map((cookie) => {
                 return cookie
                   .replace(/;\s*Secure/gi, "") // Remove Secure flag for localhost
-                  .replace(/;\s*SameSite=Strict/gi, "; SameSite=Lax") // Change to Lax for dev
+                  .replace(/;\s*SameSite=Strict/gi, "; SameSite=Lax"); // Change to Lax for dev
               })
               proxyRes.headers["set-cookie"] = modifiedCookies
             }
