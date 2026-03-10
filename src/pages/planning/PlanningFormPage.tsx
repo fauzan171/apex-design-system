@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -38,7 +38,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { planningService, mockProducts, mockBoM, mockStockLevels } from "@/data/mockPlanningData";
+import { planningService } from "@/services/planningService";
+import { productService, bomService } from "@/services/masterDataService";
+import { warehouseService } from "@/services/warehouseService";
+import type { Product, BoMItem } from "@/types/masterData";
 import { cn } from "@/lib/utils";
 
 interface PlanItemWithMR {
@@ -62,8 +65,14 @@ interface PlanItemWithMR {
 export function PlanningFormPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [showAddProductDialog, setShowAddProductDialog] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+
+  // Data from API
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stockLevels, setStockLevels] = useState<Record<string, number>>({});
+  const [bomCache, setBomCache] = useState<Record<string, BoMItem[]>>({});
 
   // Form State
   const [hoOrderReference, setHoOrderReference] = useState("");
@@ -79,8 +88,51 @@ export function PlanningFormPage() {
   // Validation
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Load initial data
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      const [productsData, stockData] = await Promise.all([
+        productService.getProducts({ type: "FG" }),
+        warehouseService.getStocks(),
+      ]);
+      setProducts(productsData);
+      // Convert stock array to record
+      const stockRecord: Record<string, number> = {};
+      stockData.forEach((s: { productId: string; quantity: number }) => {
+        stockRecord[s.productId] = s.quantity;
+      });
+      setStockLevels(stockRecord);
+    } catch (error) {
+      console.error("Failed to load initial data:", error);
+    } finally {
+      setInitialLoading(false);
+    }
+  };
+
+  // Get BoM for a product
+  const getBoMForProduct = async (productId: string): Promise<BoMItem[]> => {
+    if (bomCache[productId]) {
+      return bomCache[productId];
+    }
+    try {
+      const boMs = await bomService.getBoMs({ productId, status: "active" });
+      if (boMs.length > 0 && boMs[0].components) {
+        const components = boMs[0].components;
+        setBomCache((prev) => ({ ...prev, [productId]: components }));
+        return components;
+      }
+    } catch (error) {
+      console.error("Failed to load BoM:", error);
+    }
+    return [];
+  };
+
   // Get finished goods only
-  const finishedGoods = mockProducts.filter((p) => p.type === "Finished Good");
+  const finishedGoods = products.filter((p: Product) => p.type === "FG");
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -115,10 +167,10 @@ export function PlanningFormPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     if (!selectedProductId || selectedQuantity <= 0) return;
 
-    const product = mockProducts.find((p) => p.id === selectedProductId);
+    const product = products.find((p: Product) => p.id === selectedProductId);
     if (!product) return;
 
     // Check if product already added
@@ -128,22 +180,23 @@ export function PlanningFormPage() {
     }
 
     // Generate MR items from BoM
-    const bomMaterials = mockBoM[selectedProductId] || [];
+    const bomMaterials = await getBoMForProduct(selectedProductId);
     const defaultWeights = [50, 25, 15, 7, 3]; // Default weights
 
-    const mrItems = bomMaterials.map((material, idx) => {
-      const requiredQty = material.quantityRequired * selectedQuantity;
-      const availableQty = mockStockLevels[material.productId] || 0;
+    const mrItems = bomMaterials.map((material: BoMItem, idx: number) => {
+      const requiredQty = (material.quantity ?? 0) * selectedQuantity;
+      const materialId = material.productId ?? "";
+      const availableQty = stockLevels[materialId] || 0;
       const shortageQty = Math.max(0, requiredQty - availableQty);
 
       return {
-        materialId: material.productId,
-        materialCode: material.productCode,
-        materialName: material.productName,
+        materialId,
+        materialCode: material.product?.code ?? "",
+        materialName: material.product?.name ?? "",
         requiredQty,
         availableQty,
         shortageQty,
-        unit: material.unit,
+        unit: material.unit ?? "",
         priorityWeight: defaultWeights[idx] || 1,
       };
     });
@@ -153,7 +206,7 @@ export function PlanningFormPage() {
       productCode: product.code,
       productName: product.name,
       quantity: selectedQuantity,
-      unit: product.unit,
+      unit: product.unitOfMeasure ?? "PCS",
       mrItems,
     };
 
@@ -179,20 +232,21 @@ export function PlanningFormPage() {
     setPlanItems(newItems);
   };
 
-  const handleQuantityChange = (index: number, quantity: number) => {
+  const handleQuantityChange = async (index: number, quantity: number) => {
     if (quantity <= 0) return;
 
     const newItems = [...planItems];
     const item = newItems[index];
 
     // Recalculate MR items
-    const bomMaterials = mockBoM[item.productId] || [];
+    const bomMaterials = await getBoMForProduct(item.productId);
     item.quantity = quantity;
 
-    item.mrItems = bomMaterials.map((material) => {
-      const existingMrItem = item.mrItems.find((m) => m.materialId === material.productId);
-      const requiredQty = material.quantityRequired * quantity;
-      const availableQty = mockStockLevels[material.productId] || 0;
+    item.mrItems = bomMaterials.map((material: BoMItem) => {
+      const materialId = material.productId ?? "";
+      const existingMrItem = item.mrItems.find((m) => m.materialId === materialId);
+      const requiredQty = (material.quantity ?? 0) * quantity;
+      const availableQty = stockLevels[materialId] || 0;
       const shortageQty = Math.max(0, requiredQty - availableQty);
 
       return {
@@ -223,16 +277,16 @@ export function PlanningFormPage() {
     try {
       // Create plan
       const newPlan = await planningService.createPlan({
-        hoOrderReference,
-        planDate,
-        targetCompletionDate,
+        ho_order_reference: hoOrderReference,
+        plan_date: planDate,
+        target_completion_date: targetCompletionDate,
         notes,
       });
 
       // Add items to plan
       for (const item of planItems) {
         await planningService.addPlanItem(newPlan.id, {
-          productId: item.productId,
+          product_id: item.productId,
           quantity: item.quantity,
           mrItems: item.mrItems.map((m) => ({
             materialId: m.materialId,
@@ -252,6 +306,14 @@ export function PlanningFormPage() {
   const getTotalPriorityWeight = (item: PlanItemWithMR): number => {
     return item.mrItems.reduce((sum, m) => sum + m.priorityWeight, 0);
   };
+
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -490,72 +552,78 @@ export function PlanningFormPage() {
                             </div>
 
                             {/* MR Items Table */}
-                            <div className="border rounded-lg overflow-hidden">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="bg-slate-50">
-                                    <TableHead>Material</TableHead>
-                                    <TableHead className="text-right">Required</TableHead>
-                                    <TableHead className="text-right">Available</TableHead>
-                                    <TableHead className="text-right">Shortage</TableHead>
-                                    <TableHead className="text-center w-32">Priority %</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {item.mrItems.map((mrItem) => (
-                                    <TableRow key={mrItem.materialId}>
-                                      <TableCell>
-                                        <div>
-                                          <p className="font-medium">{mrItem.materialCode}</p>
-                                          <p className="text-xs text-slate-500">
-                                            {mrItem.materialName}
-                                          </p>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        {mrItem.requiredQty.toLocaleString()} {mrItem.unit}
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        {mrItem.availableQty.toLocaleString()} {mrItem.unit}
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        {mrItem.shortageQty > 0 ? (
-                                          <span className="text-red-600 font-medium">
-                                            -{mrItem.shortageQty.toLocaleString()} {mrItem.unit}
-                                          </span>
-                                        ) : (
-                                          <span className="text-green-600">-</span>
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          max={100}
-                                          value={mrItem.priorityWeight}
-                                          onChange={(e) =>
-                                            handlePriorityWeightChange(
-                                              index,
-                                              mrItem.materialId,
-                                              parseInt(e.target.value) || 0
-                                            )
-                                          }
-                                          className={cn(
-                                            "w-24 text-center",
-                                            mrItem.priorityWeight ===
-                                              Math.max(...item.mrItems.map((m) => m.priorityWeight)) &&
-                                              "border-amber-400 bg-amber-50"
-                                          )}
-                                        />
-                                      </TableCell>
+                            {item.mrItems.length > 0 ? (
+                              <div className="border rounded-lg overflow-hidden">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="bg-slate-50">
+                                      <TableHead>Material</TableHead>
+                                      <TableHead className="text-right">Required</TableHead>
+                                      <TableHead className="text-right">Available</TableHead>
+                                      <TableHead className="text-right">Shortage</TableHead>
+                                      <TableHead className="text-center w-32">Priority %</TableHead>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {item.mrItems.map((mrItem) => (
+                                      <TableRow key={mrItem.materialId}>
+                                        <TableCell>
+                                          <div>
+                                            <p className="font-medium">{mrItem.materialCode}</p>
+                                            <p className="text-xs text-slate-500">
+                                              {mrItem.materialName}
+                                            </p>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {mrItem.requiredQty.toLocaleString()} {mrItem.unit}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {mrItem.availableQty.toLocaleString()} {mrItem.unit}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {mrItem.shortageQty > 0 ? (
+                                            <span className="text-red-600 font-medium">
+                                              -{mrItem.shortageQty.toLocaleString()} {mrItem.unit}
+                                            </span>
+                                          ) : (
+                                            <span className="text-green-600">-</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={mrItem.priorityWeight}
+                                            onChange={(e) =>
+                                              handlePriorityWeightChange(
+                                                index,
+                                                mrItem.materialId,
+                                                parseInt(e.target.value) || 0
+                                              )
+                                            }
+                                            className={cn(
+                                              "w-24 text-center",
+                                              mrItem.priorityWeight ===
+                                                Math.max(...item.mrItems.map((m) => m.priorityWeight)) &&
+                                                "border-amber-400 bg-amber-50"
+                                            )}
+                                          />
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-slate-500 text-center py-4">
+                                No materials found for this product (BoM not configured)
+                              </p>
+                            )}
 
                             {/* Priority Weight Validation */}
-                            {!isValidWeight && (
+                            {!isValidWeight && item.mrItems.length > 0 && (
                               <p className="text-sm text-amber-600 flex items-center gap-1 mt-2">
                                 <AlertCircle className="h-3 w-3" />
                                 Total priority must equal 100% (currently {totalWeight.toFixed(1)}%)
@@ -601,7 +669,7 @@ export function PlanningFormPage() {
                   <SelectValue placeholder="Select a product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {finishedGoods.map((product) => (
+                  {(finishedGoods.length > 0 ? finishedGoods : products).map((product: Product) => (
                     <SelectItem
                       key={product.id}
                       value={product.id}

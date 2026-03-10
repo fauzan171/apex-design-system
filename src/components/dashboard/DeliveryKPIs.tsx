@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type { DeliveryKPIs } from "@/types";
 import {
   LineChart,
@@ -25,73 +26,70 @@ export function DeliveryKPIsCard({ data }: DeliveryKPIsCardProps) {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">On-Time Delivery</p>
-            <p className="text-2xl font-bold text-slate-900">{data.onTimeRate}%</p>
-            <p
-              className={
-                data.onTimeTrend >= 0 ? "text-xs text-green-600" : "text-xs text-red-600"
-              }
-            >
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">On-Time Delivery</p>
+            <p className="text-2xl font-bold text-foreground">{data.onTimeRate}%</p>
+            <p className={cn("text-xs", data.onTimeTrend >= 0 ? "text-success" : "text-destructive")}>
               {data.onTimeTrend >= 0 ? "+" : ""}
               {data.onTimeTrend}% vs last period
             </p>
           </div>
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">Avg Lead Time</p>
-            <p className="text-2xl font-bold text-slate-900">{data.avgLeadTime} days</p>
-            <p
-              className={
-                data.leadTimeTrend <= 0 ? "text-xs text-green-600" : "text-xs text-red-600"
-              }
-            >
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">Avg Lead Time</p>
+            <p className="text-2xl font-bold text-foreground">{data.avgLeadTime} days</p>
+            <p className={cn("text-xs", data.leadTimeTrend <= 0 ? "text-success" : "text-destructive")}>
               {data.leadTimeTrend >= 0 ? "+" : ""}
               {data.leadTimeTrend} days vs last period
             </p>
           </div>
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">BAST Completion</p>
-            <p className="text-2xl font-bold text-slate-900">{data.bastCompletion}%</p>
-            <p className="text-xs text-slate-500">This period</p>
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">BAST Completion</p>
+            <p className="text-2xl font-bold text-foreground">{data.bastCompletion}%</p>
+            <p className="text-xs text-muted-foreground">This period</p>
           </div>
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">Total DOs</p>
-            <p className="text-2xl font-bold text-slate-900">{data.totalDOs}</p>
-            <p className="text-xs text-slate-500">This period</p>
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">Total DOs</p>
+            <p className="text-2xl font-bold text-foreground">{data.totalDOs}</p>
+            <p className="text-xs text-muted-foreground">This period</p>
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-medium text-slate-700 mb-3">Delivery Trend</p>
+          <p className="text-sm font-medium text-foreground mb-3">Delivery Trend</p>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.dailyTrend}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#E2E8F0"
+                  stroke="hsl(var(--border))"
                 />
                 <XAxis
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: "#64748B" }}
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: "#64748B" }}
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
                 />
                 <Tooltip
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #E2E8F0" }}
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "1px solid hsl(var(--border))",
+                    backgroundColor: "hsl(var(--popover))",
+                    color: "hsl(var(--popover-foreground))"
+                  }}
                 />
                 <Line
                   type="monotone"
                   dataKey="value"
                   name="Deliveries"
-                  stroke="#3B82F6"
+                  stroke="hsl(var(--info))"
                   strokeWidth={2}
-                  dot={{ r: 4 }}
+                  dot={{ r: 4, fill: "hsl(var(--info))" }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -99,7 +97,7 @@ export function DeliveryKPIsCard({ data }: DeliveryKPIsCardProps) {
         </div>
 
         <div>
-          <p className="text-sm font-medium text-slate-700 mb-3">DO by Status</p>
+          <p className="text-sm font-medium text-foreground mb-3">DO by Status</p>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -117,7 +115,12 @@ export function DeliveryKPIsCard({ data }: DeliveryKPIsCardProps) {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #E2E8F0" }}
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "1px solid hsl(var(--border))",
+                    backgroundColor: "hsl(var(--popover))",
+                    color: "hsl(var(--popover-foreground))"
+                  }}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -129,7 +132,7 @@ export function DeliveryKPIsCard({ data }: DeliveryKPIsCardProps) {
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-xs text-slate-600">
+                <span className="text-xs text-muted-foreground">
                   {entry.name} ({entry.value}%)
                 </span>
               </div>

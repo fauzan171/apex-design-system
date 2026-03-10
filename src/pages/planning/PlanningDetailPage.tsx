@@ -52,8 +52,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { planningService } from "@/data/mockPlanningData";
-import type { ProductionPlan, MRItem } from "@/types/planning";
+import { planningService } from "@/services/planningService";
+import type { ProductionPlan, MRItem, ProductionPlanStatusType } from "@/types/planning";
 import {
   ProductionPlanStatus,
   MRItemStatus,
@@ -143,7 +143,7 @@ export function PlanningDetailPage() {
     if (!plan || !rejectReason.trim()) return;
     setActionLoading(true);
     try {
-      await planningService.rejectPlan(plan.id, rejectReason);
+      await planningService.rejectPlan(plan.id, { notes: rejectReason });
       setShowRejectDialog(false);
       setRejectReason("");
       loadPlan();
@@ -158,7 +158,7 @@ export function PlanningDetailPage() {
     if (!plan || !cancelReason.trim()) return;
     setActionLoading(true);
     try {
-      await planningService.cancelPlan(plan.id, cancelReason);
+      await planningService.cancelPlan(plan.id, { reason: cancelReason });
       setShowCancelDialog(false);
       setCancelReason("");
       loadPlan();
@@ -171,16 +171,16 @@ export function PlanningDetailPage() {
 
   // Open PR dialog for a plan item
   const openPRDialog = (planItemId: string) => {
-    const planItem = plan?.items.find((item) => item.id === planItemId);
+    const planItem = plan?.items?.find((item) => item.id === planItemId);
     if (!planItem) return;
 
     // Get MR items with shortage and not yet converted to PR
-    const itemsWithShortage = planItem.mrItems.filter(
-      (mr) => mr.shortageQty > 0 && !mr.prId
+    const itemsWithShortage = (planItem.mrItems ?? []).filter(
+      (mr) => (mr.shortageQuantity ?? 0) > 0 && !mr.prId
     );
     setSelectedMRItems(itemsWithShortage);
     setCurrentPlanItemForPR(planItemId);
-    setPRRequiredDate(plan?.targetCompletionDate || "");
+    setPRRequiredDate(plan?.targetCompletionDate ?? "");
     setPRNotes("");
     setShowPRDialog(true);
   };
@@ -204,13 +204,13 @@ export function PlanningDetailPage() {
     try {
       await planningService.createPRFromMR({
         planId: plan.id,
-        planNumber: plan.planNumber,
+        planNumber: plan.planNumber ?? "",
         items: selectedMRItems.map((mr) => ({
           materialId: mr.materialId,
-          materialCode: mr.materialCode,
-          materialName: mr.materialName,
+          materialCode: mr.materialCode ?? "",
+          materialName: mr.materialName ?? "",
           quantity: getPRItemQuantity(mr),
-          unit: mr.unit,
+          unit: mr.unit ?? "",
         })),
         requiredDate: prRequiredDate,
         notes: prNotes,
@@ -230,9 +230,9 @@ export function PlanningDetailPage() {
   const filterMRItems = (items: MRItem[]) => {
     switch (mrFilter) {
       case "shortage":
-        return items.filter((mr) => mr.shortageQty > 0);
+        return items.filter((mr) => (mr.shortageQuantity ?? 0) > 0);
       case "no-shortage":
-        return items.filter((mr) => mr.shortageQty === 0);
+        return items.filter((mr) => (mr.shortageQuantity ?? 0) === 0);
       default:
         return items;
     }
@@ -244,14 +244,14 @@ export function PlanningDetailPage() {
       let comparison = 0;
       switch (mrSortBy) {
         case "material":
-          comparison = a.materialCode.localeCompare(b.materialCode);
+          comparison = (a.materialCode ?? "").localeCompare(b.materialCode ?? "");
           break;
         case "shortage":
-          comparison = a.shortageQty - b.shortageQty;
+          comparison = (a.shortageQuantity ?? 0) - (b.shortageQuantity ?? 0);
           break;
         case "priority":
         default:
-          comparison = a.priorityWeight - b.priorityWeight;
+          comparison = (a.priorityWeight ?? 0) - (b.priorityWeight ?? 0);
           break;
       }
       return mrSortOrder === "asc" ? comparison : -comparison;
@@ -270,11 +270,11 @@ export function PlanningDetailPage() {
 
   // Select all shortage items
   const handleSelectAllShortage = () => {
-    const planItem = plan?.items.find((item) => item.id === currentPlanItemForPR);
+    const planItem = plan?.items?.find((item) => item.id === currentPlanItemForPR);
     if (!planItem) return;
 
-    const allShortageItems = planItem.mrItems.filter(
-      (mr) => mr.shortageQty > 0 && !mr.prId
+    const allShortageItems = (planItem.mrItems ?? []).filter(
+      (mr) => (mr.shortageQuantity ?? 0) > 0 && !mr.prId
     );
     setSelectedMRItems(allShortageItems);
   };
@@ -318,12 +318,12 @@ export function PlanningDetailPage() {
   // P1: Create WO with warning check
   const handleCreateWOWithCheck = async (planItemId: string) => {
     if (!plan) return;
-    const planItem = plan.items.find((item) => item.id === planItemId);
+    const planItem = plan.items?.find((item) => item.id === planItemId);
     if (!planItem) return;
 
     // Check for non-critical shortage
-    const nonCriticalShortage = planItem.mrItems.filter(
-      (mr) => !mr.isCritical && mr.shortageQty > 0
+    const nonCriticalShortage = (planItem.mrItems ?? []).filter(
+      (mr) => !mr.isCritical && (mr.shortageQuantity ?? 0) > 0
     );
 
     if (nonCriticalShortage.length > 0) {
@@ -339,20 +339,20 @@ export function PlanningDetailPage() {
   // Execute WO creation
   const executeCreateWO = async (planItemId: string) => {
     if (!plan) return;
-    const planItem = plan.items.find((item) => item.id === planItemId);
+    const planItem = plan.items?.find((item) => item.id === planItemId);
     if (!planItem) return;
 
     setWOLoading(planItemId);
     try {
       await planningService.createWO({
         planId: plan.id,
-        planNumber: plan.planNumber,
+        planNumber: plan.planNumber ?? "",
         planItemId: planItem.id,
         productId: planItem.productId,
-        productCode: planItem.productCode,
-        productName: planItem.productName,
-        quantity: planItem.quantity,
-        unit: planItem.unit,
+        productCode: planItem.productCode ?? "",
+        productName: planItem.productName ?? "",
+        quantity: planItem.quantity ?? 0,
+        unit: planItem.unit ?? "",
       });
 
       // P1: Auto update status to In Progress if this is the first WO
@@ -376,9 +376,9 @@ export function PlanningDetailPage() {
       case "critical":
         return items.filter((mr) => mr.isCritical);
       case "high":
-        return items.filter((mr) => mr.priorityWeight >= 40 && !mr.isCritical);
+        return items.filter((mr) => (mr.priorityWeight ?? 0) >= 40 && !mr.isCritical);
       case "normal":
-        return items.filter((mr) => mr.priorityWeight < 40);
+        return items.filter((mr) => (mr.priorityWeight ?? 0) < 40);
       default:
         return items;
     }
@@ -394,7 +394,7 @@ export function PlanningDetailPage() {
 
   // Get PR item quantity (use shortage qty as default)
   const getPRItemQuantity = (mrItem: MRItem): number => {
-    return prItemQuantities[mrItem.id] ?? mrItem.shortageQty;
+    return prItemQuantities[mrItem.id] ?? mrItem.shortageQuantity ?? 0;
   };
 
   // Export MR to CSV
@@ -417,21 +417,21 @@ export function PlanningDetailPage() {
       status: string;
     }[] = [];
 
-    plan.items.forEach((item) => {
-      item.mrItems.forEach((mr) => {
+    plan.items?.forEach((item) => {
+      item.mrItems?.forEach((mr) => {
         exportData.push({
-          planNumber: plan.planNumber,
-          productCode: item.productCode,
-          productName: item.productName,
-          quantity: item.quantity,
-          materialCode: mr.materialCode,
-          materialName: mr.materialName,
-          requiredQty: mr.requiredQty,
-          availableQty: mr.availableQty,
-          shortageQty: mr.shortageQty,
-          unit: mr.unit,
-          priorityWeight: mr.priorityWeight,
-          status: mr.status,
+          planNumber: plan.planNumber ?? "",
+          productCode: item.productCode ?? "",
+          productName: item.productName ?? "",
+          quantity: item.quantity ?? 0,
+          materialCode: mr.materialCode ?? "",
+          materialName: mr.materialName ?? "",
+          requiredQty: mr.requiredQty ?? 0,
+          availableQty: mr.availableQty ?? 0,
+          shortageQty: mr.shortageQuantity ?? 0,
+          unit: mr.unit ?? "",
+          priorityWeight: mr.priorityWeight ?? 0,
+          status: String(mr.status ?? ""),
         });
       });
     });
@@ -504,10 +504,10 @@ export function PlanningDetailPage() {
         <body>
           <h1>Material Requirement Report</h1>
           <div class="info">
-            <p><strong>Plan Number:</strong> ${plan.planNumber}</p>
-            <p><strong>HO Order Reference:</strong> ${plan.hoOrderReference}</p>
-            <p><strong>Plan Date:</strong> ${formatDate(plan.planDate)}</p>
-            <p><strong>Target Completion:</strong> ${formatDate(plan.targetCompletionDate)}</p>
+            <p><strong>Plan Number:</strong> ${plan.planNumber ?? ""}</p>
+            <p><strong>HO Order Reference:</strong> ${plan.hoOrderReference ?? ""}</p>
+            <p><strong>Plan Date:</strong> ${formatDate(plan.planDate ?? "")}</p>
+            <p><strong>Target Completion:</strong> ${formatDate(plan.targetCompletionDate ?? "")}</p>
           </div>
           <table>
             <thead>
@@ -522,24 +522,24 @@ export function PlanningDetailPage() {
               </tr>
             </thead>
             <tbody>
-              ${plan.items
+              ${(plan.items ?? [])
                 .map((item) =>
-                  item.mrItems
+                  (item.mrItems ?? [])
                     .map(
                       (mr) => `
                 <tr>
-                  <td>${item.productCode}</td>
-                  <td>${mr.materialCode} - ${mr.materialName}</td>
-                  <td>${mr.requiredQty.toLocaleString()} ${mr.unit}</td>
-                  <td>${mr.availableQty.toLocaleString()} ${mr.unit}</td>
-                  <td class="${mr.shortageQty > 0 ? "shortage" : ""}">${
-                    mr.shortageQty > 0
-                      ? `-${mr.shortageQty.toLocaleString()} ${mr.unit}`
+                  <td>${item.productCode ?? ""}</td>
+                  <td>${mr.materialCode ?? ""} - ${mr.materialName ?? ""}</td>
+                  <td>${(mr.requiredQty ?? 0).toLocaleString()} ${mr.unit ?? ""}</td>
+                  <td>${(mr.availableQty ?? 0).toLocaleString()} ${mr.unit ?? ""}</td>
+                  <td class="${(mr.shortageQuantity ?? 0) > 0 ? "shortage" : ""}">${
+                    (mr.shortageQuantity ?? 0) > 0
+                      ? `-${(mr.shortageQuantity ?? 0).toLocaleString()} ${mr.unit ?? ""}`
                       : "-"
                   }</td>
-                  <td>${mr.priorityWeight}%</td>
+                  <td>${mr.priorityWeight ?? 0}%</td>
                   <td class="${mr.status === "Fulfilled" ? "fulfilled" : ""}">${
-                    mr.status
+                    mr.status ?? ""
                   }</td>
                 </tr>
               `
@@ -577,7 +577,7 @@ export function PlanningDetailPage() {
     });
   };
 
-  const getStatusIcon = (status: ProductionPlanStatus) => {
+  const getStatusIcon = (status: ProductionPlanStatusType) => {
     switch (status) {
       case ProductionPlanStatus.DRAFT:
         return <Clock className="h-4 w-4" />;
@@ -706,7 +706,7 @@ export function PlanningDetailPage() {
                   loadPlan();
                   setActionLoading(false);
                 }}
-                disabled={actionLoading || plan.items.length === 0}
+                disabled={actionLoading || (plan.items?.length ?? 0) === 0}
                 className="gap-2"
               >
                 <Send className="h-4 w-4" />
@@ -781,7 +781,7 @@ export function PlanningDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Plan Date</p>
-                <p className="font-medium text-slate-900">{formatDate(plan.planDate)}</p>
+                <p className="font-medium text-slate-900">{formatDate(plan.planDate ?? "")}</p>
               </div>
             </div>
           </CardContent>
@@ -795,7 +795,7 @@ export function PlanningDetailPage() {
               <div>
                 <p className="text-sm text-slate-500">Target Completion</p>
                 <p className="font-medium text-slate-900">
-                  {formatDate(plan.targetCompletionDate)}
+                  {formatDate(plan.targetCompletionDate ?? "")}
                 </p>
               </div>
             </div>
@@ -809,7 +809,7 @@ export function PlanningDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Products</p>
-                <p className="font-medium text-slate-900">{plan.items.length} items</p>
+                <p className="font-medium text-slate-900">{plan.items?.length ?? 0} items</p>
               </div>
             </div>
           </CardContent>
@@ -852,7 +852,7 @@ export function PlanningDetailPage() {
           <CardTitle className="flex items-center justify-between">
             <span>Plan Items</span>
             <div className="flex items-center gap-2">
-              {plan.items.length > 0 && (
+              {(plan.items?.length ?? 0) > 0 && (
                 <div className="flex items-center gap-1">
                   <Button
                     variant="outline"
@@ -884,7 +884,7 @@ export function PlanningDetailPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {plan.items.length === 0 ? (
+          {(plan.items?.length ?? 0) === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-500">
               <Package className="h-12 w-12 text-slate-300 mb-4" />
               <p className="font-medium">No products added yet</p>
@@ -892,7 +892,7 @@ export function PlanningDetailPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-200">
-              {plan.items.map((item) => (
+              {plan.items?.map((item) => (
                 <div key={item.id} className="p-4">
                   {/* Item Header */}
                   <div
@@ -910,17 +910,17 @@ export function PlanningDetailPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-slate-900">
-                            {item.productCode}
+                            {item.productCode ?? ""}
                           </span>
                           <span className="text-slate-500">-</span>
-                          <span className="text-slate-700">{item.productName}</span>
+                          <span className="text-slate-700">{item.productName ?? ""}</span>
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-                          <span>Qty: {item.quantity} {item.unit}</span>
+                          <span>Qty: {item.quantity ?? 0} {item.unit ?? ""}</span>
                           <span className="text-slate-300">|</span>
-                          {getMRStatusBadge(item.mrStatus)}
+                          {getMRStatusBadge(item.mrStatus ?? "")}
                           <span className="text-slate-300">|</span>
-                          {getWOStatusBadge(item.woStatus)}
+                          {getWOStatusBadge(item.woStatus ?? "")}
                         </div>
                       </div>
                     </div>
@@ -953,7 +953,7 @@ export function PlanningDetailPage() {
                   </div>
 
                   {/* Expanded MR Items */}
-                  {expandedItems.has(item.id) && item.mrItems.length > 0 && (
+                  {expandedItems.has(item.id) && (item.mrItems?.length ?? 0) > 0 && (
                     <div className="mt-4 ml-10 border rounded-lg overflow-hidden">
                       {/* Filter & Sort Controls */}
                       <div className="flex items-center justify-between p-3 bg-slate-50 border-b">
@@ -1027,7 +1027,7 @@ export function PlanningDetailPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-slate-500">
-                          {filterMRByPriority(filterMRItems(item.mrItems)).length} items
+                          {filterMRByPriority(filterMRItems(item.mrItems ?? [])).length} items
                         </div>
                       </div>
                       <Table>
@@ -1076,7 +1076,7 @@ export function PlanningDetailPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {sortMRItems(filterMRByPriority(filterMRItems(item.mrItems)))
+                          {sortMRItems(filterMRByPriority(filterMRItems(item.mrItems ?? [])))
                             .map((mrItem) => (
                               <TableRow
                                 key={mrItem.id}
@@ -1103,22 +1103,22 @@ export function PlanningDetailPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  {mrItem.requiredQty.toLocaleString()} {mrItem.unit}
+                                  {(mrItem.requiredQty ?? 0).toLocaleString()} {mrItem.unit ?? ""}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  {mrItem.availableQty.toLocaleString()} {mrItem.unit}
+                                  {(mrItem.availableQty ?? 0).toLocaleString()} {mrItem.unit ?? ""}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  {mrItem.shortageQty > 0 ? (
+                                  {(mrItem.shortageQuantity ?? 0) > 0 ? (
                                     <span className="text-red-600 font-medium">
-                                      -{mrItem.shortageQty.toLocaleString()} {mrItem.unit}
+                                      -{(mrItem.shortageQuantity ?? 0).toLocaleString()} {mrItem.unit ?? ""}
                                     </span>
                                   ) : (
                                     <span className="text-green-600">-</span>
                                   )}
                                 </TableCell>
                                 <TableCell className="text-center">
-                                  <Badge variant="outline">{mrItem.priorityWeight}%</Badge>
+                                  <Badge variant="outline">{mrItem.priorityWeight ?? 0}%</Badge>
                                 </TableCell>
                                 <TableCell className="text-center">
                                   {mrItem.status === MRItemStatus.FULFILLED ? (
@@ -1140,7 +1140,7 @@ export function PlanningDetailPage() {
                                   )}
                                 </TableCell>
                                 <TableCell className="text-center">
-                                  {mrItem.shortageQty > 0 && !mrItem.prId && (
+                                  {(mrItem.shortageQuantity ?? 0) > 0 && !mrItem.prId && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -1197,14 +1197,14 @@ export function PlanningDetailPage() {
       </Card>
 
       {/* Approval History */}
-      {plan.approvalLogs.length > 0 && (
+      {(plan.approvalLogs?.length ?? 0) > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Approval History</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {plan.approvalLogs.map((log, index) => (
+              {plan.approvalLogs?.map((log, index) => (
                 <div
                   key={log.id}
                   className="flex items-start gap-3 text-sm"
@@ -1220,7 +1220,7 @@ export function PlanningDetailPage() {
                           : "bg-blue-500"
                       )}
                     />
-                    {index < plan.approvalLogs.length - 1 && (
+                    {index < (plan.approvalLogs?.length ?? 0) - 1 && (
                       <div className="w-px h-6 bg-slate-200" />
                     )}
                   </div>
@@ -1231,7 +1231,7 @@ export function PlanningDetailPage() {
                       <span className="text-slate-700">{log.userName}</span>
                     </div>
                     <p className="text-slate-500 text-xs mt-0.5">
-                      {formatDateTime(log.timestamp)}
+                      {formatDateTime(log.timestamp ?? "")}
                     </p>
                     {log.notes && (
                       <p className="text-slate-600 mt-1 italic">"{log.notes}"</p>
@@ -1354,10 +1354,10 @@ export function PlanningDetailPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {plan?.items
-                    .find((item) => item.id === currentPlanItemForPR)
-                    ?.mrItems.filter((mr) => mr.shortageQty > 0 && !mr.prId)
-                    .sort((a, b) => b.priorityWeight - a.priorityWeight)
+                  {(plan?.items
+                    ?.find((item) => item.id === currentPlanItemForPR)
+                    ?.mrItems ?? []).filter((mr) => (mr.shortageQuantity ?? 0) > 0 && !mr.prId)
+                    .sort((a, b) => (b.priorityWeight ?? 0) - (a.priorityWeight ?? 0))
                     .map((mrItem) => (
                       <TableRow
                         key={mrItem.id}
@@ -1385,9 +1385,9 @@ export function PlanningDetailPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <div>
-                              <p className="font-medium">{mrItem.materialCode}</p>
+                              <p className="font-medium">{mrItem.materialCode ?? ""}</p>
                               <p className="text-xs text-slate-500">
-                                {mrItem.materialName}
+                                {mrItem.materialName ?? ""}
                               </p>
                             </div>
                             {mrItem.isCritical && (
@@ -1401,20 +1401,20 @@ export function PlanningDetailPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right text-red-600 font-medium">
-                          {mrItem.shortageQty.toLocaleString()} {mrItem.unit}
+                          {(mrItem.shortageQuantity ?? 0).toLocaleString()} {mrItem.unit ?? ""}
                         </TableCell>
                         <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                           <Input
                             type="number"
                             min={1}
-                            max={mrItem.shortageQty}
+                            max={mrItem.shortageQuantity ?? 0}
                             value={getPRItemQuantity(mrItem)}
-                            onChange={(e) => updatePRItemQuantity(mrItem.id, parseInt(e.target.value) || mrItem.shortageQty)}
+                            onChange={(e) => updatePRItemQuantity(mrItem.id, parseInt(e.target.value) || (mrItem.shortageQuantity ?? 0))}
                             className="w-20 h-8 text-center"
                           />
                         </TableCell>
                         <TableCell className="text-center">
-                          <Badge variant="outline">{mrItem.priorityWeight}%</Badge>
+                          <Badge variant="outline">{mrItem.priorityWeight ?? 0}%</Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1517,15 +1517,15 @@ export function PlanningDetailPage() {
             <div className="py-4">
               <p className="text-sm font-medium text-slate-700 mb-2">Materials with shortage:</p>
               <ul className="text-sm text-slate-600 space-y-1">
-                {plan.items
+                {(plan.items ?? [])
                   .find((item) => item.id === pendingWOPlanItemId)
-                  ?.mrItems.filter((mr) => !mr.isCritical && mr.shortageQty > 0)
+                  ?.mrItems?.filter((mr) => !mr.isCritical && (mr.shortageQuantity ?? 0) > 0)
                   .map((mr) => (
                     <li key={mr.id} className="flex items-center gap-2">
                       <span className="text-amber-500">•</span>
-                      {mr.materialCode} - {mr.materialName}:{" "}
+                      {mr.materialCode ?? ""} - {mr.materialName ?? ""}:{" "}
                       <span className="text-red-600 font-medium">
-                        -{mr.shortageQty.toLocaleString()} {mr.unit}
+                        -{(mr.shortageQuantity ?? 0).toLocaleString()} {mr.unit ?? ""}
                       </span>
                     </li>
                   ))}
