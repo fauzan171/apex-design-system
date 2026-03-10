@@ -3,9 +3,6 @@ main = "./worker.js"
 compatibility_date = "2025-09-27"
 compatibility_flags = ["nodejs_compat"]
 
-# Account ID - Devops.rightjet@gmail.com
-account_id = "9268faf8a2f7980268adc029564e1601"
-
 # Enable logging and monitoring
 [observability]
 enabled = true
