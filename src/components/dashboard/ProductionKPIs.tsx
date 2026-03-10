@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ProductionKPIs } from "@/types";
+import { cn } from "@/lib/utils";
+import type { ProductionKPIs as ProductionKPIsType } from "@/types";
 import {
   LineChart,
   Line,
@@ -14,7 +15,7 @@ import {
 } from "recharts";
 
 interface ProductionKPIsCardProps {
-  data: ProductionKPIs;
+  data: ProductionKPIsType;
 }
 
 export function ProductionKPIsCard({ data }: ProductionKPIsCardProps) {
@@ -25,69 +26,74 @@ export function ProductionKPIsCard({ data }: ProductionKPIsCardProps) {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">Efficiency</p>
-            <p className="text-2xl font-bold text-slate-900">{data.efficiency}%</p>
-            <p className="text-xs text-green-600">
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">Efficiency</p>
+            <p className="text-2xl font-bold text-foreground">{data.efficiency}%</p>
+            <p className={cn("text-xs", data.efficiencyTrend >= 0 ? "text-success" : "text-destructive")}>
               {data.efficiencyTrend >= 0 ? "+" : ""}
               {data.efficiencyTrend}% vs last period
             </p>
           </div>
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">On-Time Completion</p>
-            <p className="text-2xl font-bold text-slate-900">{data.onTimeRate}%</p>
-            <p className="text-xs text-green-600">
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">On-Time Completion</p>
+            <p className="text-2xl font-bold text-foreground">{data.onTimeRate}%</p>
+            <p className={cn("text-xs", data.onTimeTrend >= 0 ? "text-success" : "text-destructive")}>
               {data.onTimeTrend >= 0 ? "+" : ""}
               {data.onTimeTrend}% vs last period
             </p>
           </div>
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">QC Pass Rate</p>
-            <p className="text-2xl font-bold text-slate-900">{data.qcPassRate}%</p>
-            <p className="text-xs text-green-600">
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">QC Pass Rate</p>
+            <p className="text-2xl font-bold text-foreground">{data.qcPassRate}%</p>
+            <p className={cn("text-xs", data.qcTrend >= 0 ? "text-success" : "text-destructive")}>
               {data.qcTrend >= 0 ? "+" : ""}
               {data.qcTrend}% vs last period
             </p>
           </div>
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <p className="text-sm text-slate-500">Total WOs</p>
-            <p className="text-2xl font-bold text-slate-900">{data.totalWOs}</p>
-            <p className="text-xs text-slate-500">This period</p>
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">Total WOs</p>
+            <p className="text-2xl font-bold text-foreground">{data.totalWOs}</p>
+            <p className="text-xs text-muted-foreground">This period</p>
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-medium text-slate-700 mb-3">Daily Output Trend</p>
+          <p className="text-sm font-medium text-foreground mb-3">Daily Output Trend</p>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.dailyTrend}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#E2E8F0"
+                  stroke="hsl(var(--border))"
                 />
                 <XAxis
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: "#64748B" }}
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
                 />
                 <YAxis
                   domain={[60, 100]}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: "#64748B" }}
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
                 />
                 <Tooltip
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #E2E8F0" }}
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "1px solid hsl(var(--border))",
+                    backgroundColor: "hsl(var(--popover))",
+                    color: "hsl(var(--popover-foreground))"
+                  }}
                 />
                 <Line
                   type="monotone"
                   dataKey="value"
                   name="Efficiency %"
-                  stroke="#006600"
+                  stroke="hsl(var(--primary))"
                   strokeWidth={2}
-                  dot={{ r: 4 }}
+                  dot={{ r: 4, fill: "hsl(var(--primary))" }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -95,7 +101,7 @@ export function ProductionKPIsCard({ data }: ProductionKPIsCardProps) {
         </div>
 
         <div>
-          <p className="text-sm font-medium text-slate-700 mb-3">WO by Status</p>
+          <p className="text-sm font-medium text-foreground mb-3">WO by Status</p>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -113,7 +119,12 @@ export function ProductionKPIsCard({ data }: ProductionKPIsCardProps) {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #E2E8F0" }}
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "1px solid hsl(var(--border))",
+                    backgroundColor: "hsl(var(--popover))",
+                    color: "hsl(var(--popover-foreground))"
+                  }}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -125,7 +136,7 @@ export function ProductionKPIsCard({ data }: ProductionKPIsCardProps) {
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-xs text-slate-600">
+                <span className="text-xs text-muted-foreground">
                   {entry.name} ({entry.value}%)
                 </span>
               </div>

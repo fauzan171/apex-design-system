@@ -1,127 +1,199 @@
 /**
  * Purchasing Module Types
- * Based on PRD-04-PURCHASING.md
+ * Based on PRD-04-PURCHASING.md and OpenAPI spec
  */
 
 // ============================================
 // ENUMS
 // ============================================
 
+// PR Status (matches OpenAPI PurchaseRequest.status)
+export type PRStatusType =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "rejected"
+  | "processing"
+  | "do_issued"
+  | "resubmitted"
+  | "cancelled";
+
 export enum PRStatus {
-  DRAFT = "Draft",
-  SUBMITTED = "Submitted",
-  APPROVED = "Approved",
-  REJECTED = "Rejected",
-  PROCESSING = "Processing",
-  DO_ISSUED = "DO Issued",
-  CLOSED = "Closed",
+  DRAFT = "draft",
+  SUBMITTED = "submitted",
+  APPROVED = "approved",
+  REJECTED = "rejected",
+  PROCESSING = "processing",
+  DO_ISSUED = "do_issued",
+  RESUBMITTED = "resubmitted",
+  CANCELLED = "cancelled",
 }
+
+// PR Item Status
+export type PRItemStatusType = "pending" | "partial" | "received";
 
 export enum PRItemStatus {
-  PENDING = "Pending",
-  PARTIAL = "Partial",
-  RECEIVED = "Received",
+  PENDING = "pending",
+  PARTIAL = "partial",
+  RECEIVED = "received",
 }
 
-// Legacy enum for backward compatibility
-export { PRStatus as PurchaseRequestStatus };
+// PR Priority (matches OpenAPI PurchaseRequest.priority)
+export type PRPriorityType = "low" | "medium" | "high" | "urgent";
+
+export enum PRPriority {
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+  URGENT = "urgent",
+}
+
+// Delivery Order Status (from HO)
+export type DOStatusType =
+  | "draft"
+  | "released"
+  | "partially_received"
+  | "received"
+  | "cancelled";
+
+export enum DOStatus {
+  DRAFT = "draft",
+  RELEASED = "released",
+  PARTIALLY_RECEIVED = "partially_received",
+  RECEIVED = "received",
+  CANCELLED = "cancelled",
+}
 
 // ============================================
-// INTERFACES
+// INTERFACES - Common Types
 // ============================================
 
 /**
- * Material reference (from Master Data / Planning)
+ * Material reference (matches OpenAPI Product schema)
  */
-export interface Material {
+export interface MaterialReference {
   id: string;
   code: string;
   name: string;
-  unit: string;
+  type: "FG" | "SEMI" | "RAW" | "PACKAGING" | "SPAREPART" | "SUPPORT";
+  baseUnit: string;
+  status: "active" | "inactive";
 }
 
 /**
+ * User reference
+ */
+export interface UserReference {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+// ============================================
+// INTERFACES - Purchase Request
+// ============================================
+
+/**
  * Purchase Request Item
+ * Matches OpenAPI PRItem schema
  */
 export interface PRItem {
   id: string;
   prId: string;
   materialId: string;
-  materialCode: string;
-  materialName: string;
-  quantity: number;
+  material?: MaterialReference;
+  quantityRequested: number;
+  quantityApproved?: number;
+  quantityReceived?: number;
   unit: string;
   notes?: string;
-  receivedQty: number;
-  status: PRItemStatus;
+  // Legacy fields
+  materialCode?: string;
+  materialName?: string;
+  status?: PRItemStatusType;
+  receivedQty?: number;
 }
 
 /**
- * PR Status Log Entry
+ * Approval History Entry
+ * Matches OpenAPI ApprovalHistory schema
  */
-export interface PRStatusLog {
+export interface ApprovalHistory {
   id: string;
-  prId: string;
-  oldStatus?: PRStatus;
-  newStatus: PRStatus;
-  changedBy: string;
-  changedByName: string;
-  changedAt: string;
+  entityType: string;
+  entityId: string;
+  approverId: string;
+  approver?: UserReference;
+  action: "approve" | "reject" | "request_edit" | "submit";
   notes?: string;
-}
-
-/**
- * Delivery Order from HO
- */
-export interface DeliveryOrderFromHO {
-  id: string;
-  doNumber: string;
-  prId: string;
-  doDate: string;
-  documentPath?: string;
-  documentName?: string;
-  items: DOItemFromHO[];
-  createdBy: string;
   createdAt: string;
-  notes?: string;
 }
 
 /**
- * DO Item from HO
+ * Delivery Order Item (from HO)
+ * Matches OpenAPI DOItem schema
  */
-export interface DOItemFromHO {
+export interface DOItem {
   id: string;
   doId: string;
   prItemId: string;
-  materialCode: string;
-  materialName: string;
+  materialId: string;
+  material?: MaterialReference;
   quantity: number;
+  quantityReceived?: number;
   unit: string;
+}
+
+/**
+ * Delivery Order (from HO)
+ * Matches OpenAPI DeliveryOrder schema
+ */
+export interface DeliveryOrderFromHO {
+  id: string;
+  prId: string;
+  do_number: string;
+  do_date: string;
+  status: DOStatusType;
+  items: DOItem[];
+  createdAt: string;
+  updatedAt: string;
+  // Legacy fields
+  doNumber?: string;
+  doDate?: string;
+  documentPath?: string;
+  documentName?: string;
+  createdBy?: string;
+  notes?: string;
 }
 
 /**
  * Purchase Request
+ * Matches OpenAPI PurchaseRequest schema
  */
 export interface PurchaseRequest {
   id: string;
-  prNumber: string;
-  requestDate: string;
-  requiredDate: string;
-  status: PRStatus;
-  mrId?: string;
+  mr_id?: string;
+  required_date?: string;
+  priority?: PRPriorityType;
+  notes?: string;
+  lead_time_estimate?: number;
+  status: PRStatusType;
+  items?: PRItem[];
+  approvalHistory?: ApprovalHistory[];
+  deliveryOrders?: DeliveryOrderFromHO[];
+  createdAt?: string;
+  updatedAt?: string;
+  // Legacy fields
+  prNumber?: string;
+  requestDate?: string;
+  requiredDate?: string;
   mrNumber?: string;
   sourcePlanId?: string;
   sourcePlanNumber?: string;
   planId?: string;
   planNumber?: string;
-  notes?: string;
-  leadTimeEstimate?: string;
-  items: PRItem[];
-  deliveryOrders: DeliveryOrderFromHO[];
-  statusLogs: PRStatusLog[];
-  createdBy: string;
-  createdByName: string;
-  createdAt: string;
+  createdBy?: string;
+  createdByName?: string;
   approvedBy?: string;
   approvedByName?: string;
   approvedAt?: string;
@@ -135,6 +207,89 @@ export interface PurchaseRequest {
 // FORM TYPES
 // ============================================
 
+// Matches OpenAPI CreatePRRequest
+export interface CreatePRRequest {
+  mr_id?: string;
+  required_date: string;
+  priority: PRPriorityType;
+  notes?: string;
+  lead_time_estimate?: number;
+  items: PRItemCreateData[];
+}
+
+export interface PRItemCreateData {
+  materialId: string;
+  quantityRequested: number;
+  notes?: string;
+}
+
+// Matches OpenAPI UpdatePRRequest
+export interface UpdatePRRequest {
+  required_date?: string;
+  priority?: PRPriorityType;
+  notes?: string;
+  lead_time_estimate?: number;
+  items?: PRItemUpdateData[];
+}
+
+export interface PRItemUpdateData {
+  id?: string;
+  materialId?: string;
+  quantityRequested?: number;
+  notes?: string;
+}
+
+// Matches OpenAPI SubmitPRRequest
+export interface SubmitPRRequest {
+  notes?: string;
+}
+
+// Matches OpenAPI ApprovePRRequest
+export interface ApprovePRRequest {
+  notes?: string;
+}
+
+// Matches OpenAPI RejectPRRequest
+export interface RejectPRRequest {
+  reason: string;
+  notes?: string;
+}
+
+// Matches OpenAPI AddPRItemRequest
+export interface AddPRItemRequest {
+  materialId: string;
+  quantityRequested: number;
+  notes?: string;
+}
+
+// Matches OpenAPI UpdatePRItemRequest
+export interface UpdatePRItemRequest {
+  quantityRequested?: number;
+  notes?: string;
+}
+
+// Matches OpenAPI UpdateLeadTimeRequest
+export interface UpdateLeadTimeRequest {
+  lead_time_estimate: number;
+}
+
+// Matches OpenAPI MarkAsProcessingRequest
+export interface MarkAsProcessingRequest {
+  do_number?: string;
+  do_date?: string;
+}
+
+// Matches OpenAPI MarkAsDOIssuedRequest
+export interface MarkAsDOIssuedRequest {
+  do_number: string;
+}
+
+// Matches OpenAPI AddNoteRequest
+export interface AddNoteRequest {
+  note: string;
+}
+
+// Legacy form data types
 export interface PRFormData {
   requestDate: string;
   requiredDate: string;
@@ -168,10 +323,15 @@ export interface DOItemFormData {
 // ============================================
 
 export interface PRFilters {
-  status?: PRStatus | "all";
+  status?: PRStatusType | "all";
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+  priority?: PRPriorityType;
+  mrId?: string;
+  // Legacy fields
   dateFrom?: string;
   dateTo?: string;
-  search?: string;
 }
 
 // ============================================
@@ -185,7 +345,7 @@ export interface PRAgingReport {
 }
 
 export interface PRStatusSummary {
-  status: PRStatus;
+  status: PRStatusType;
   count: number;
 }
 
@@ -194,10 +354,14 @@ export interface PRStatusSummary {
 // ============================================
 
 export interface PRListResponse {
+  success: boolean;
   data: PurchaseRequest[];
-  total: number;
-  page: number;
-  pageSize: number;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 // ============================================
@@ -205,7 +369,7 @@ export interface PRListResponse {
 // ============================================
 
 export type PRStatusColor = {
-  [key in PRStatus]: {
+  [key in PRStatusType]: {
     bg: string;
     text: string;
     border: string;
@@ -213,70 +377,125 @@ export type PRStatusColor = {
 };
 
 export const prStatusColors: PRStatusColor = {
-  [PRStatus.DRAFT]: {
+  draft: {
     bg: "bg-slate-100",
     text: "text-slate-700",
     border: "border-slate-200",
   },
-  [PRStatus.SUBMITTED]: {
+  submitted: {
     bg: "bg-amber-100",
     text: "text-amber-700",
     border: "border-amber-200",
   },
-  [PRStatus.APPROVED]: {
+  approved: {
     bg: "bg-blue-100",
     text: "text-blue-700",
     border: "border-blue-200",
   },
-  [PRStatus.REJECTED]: {
+  rejected: {
     bg: "bg-red-100",
     text: "text-red-700",
     border: "border-red-200",
   },
-  [PRStatus.PROCESSING]: {
+  processing: {
     bg: "bg-purple-100",
     text: "text-purple-700",
     border: "border-purple-200",
   },
-  [PRStatus.DO_ISSUED]: {
+  do_issued: {
     bg: "bg-cyan-100",
     text: "text-cyan-700",
     border: "border-cyan-200",
   },
-  [PRStatus.CLOSED]: {
-    bg: "bg-green-100",
-    text: "text-green-700",
-    border: "border-green-200",
+  resubmitted: {
+    bg: "bg-orange-100",
+    text: "text-orange-700",
+    border: "border-orange-200",
+  },
+  cancelled: {
+    bg: "bg-slate-100",
+    text: "text-slate-500",
+    border: "border-slate-200",
+  },
+};
+
+export const prPriorityColors: Record<PRPriorityType, { bg: string; text: string; border: string }> = {
+  low: {
+    bg: "bg-slate-100",
+    text: "text-slate-700",
+    border: "border-slate-200",
+  },
+  medium: {
+    bg: "bg-blue-100",
+    text: "text-blue-700",
+    border: "border-blue-200",
+  },
+  high: {
+    bg: "bg-amber-100",
+    text: "text-amber-700",
+    border: "border-amber-200",
+  },
+  urgent: {
+    bg: "bg-red-100",
+    text: "text-red-700",
+    border: "border-red-200",
   },
 };
 
 // Status transition rules
-export const canTransitionTo: Record<PRStatus, PRStatus[]> = {
-  [PRStatus.DRAFT]: [PRStatus.SUBMITTED],
-  [PRStatus.SUBMITTED]: [PRStatus.APPROVED, PRStatus.REJECTED],
-  [PRStatus.APPROVED]: [PRStatus.PROCESSING],
-  [PRStatus.REJECTED]: [PRStatus.SUBMITTED], // Can resubmit
-  [PRStatus.PROCESSING]: [PRStatus.DO_ISSUED],
-  [PRStatus.DO_ISSUED]: [PRStatus.CLOSED],
-  [PRStatus.CLOSED]: [], // Final state
+export const canTransitionTo: Record<PRStatusType, PRStatusType[]> = {
+  draft: ["submitted", "cancelled"],
+  submitted: ["approved", "rejected"],
+  approved: ["processing"],
+  rejected: ["draft", "resubmitted"],
+  processing: ["do_issued"],
+  do_issued: [], // Wait for goods receipt
+  resubmitted: ["approved", "rejected"],
+  cancelled: [],
 };
 
 // Check if PR can be edited
-export const canEdit = (status: PRStatus): boolean => {
-  return status === PRStatus.DRAFT;
+export const canEdit = (status: PRStatusType): boolean => {
+  return status === "draft" || status === "resubmitted";
 };
 
 // Check if PR can be deleted
-export const canDelete = (status: PRStatus): boolean => {
-  return status === PRStatus.DRAFT;
+export const canDelete = (status: PRStatusType): boolean => {
+  return status === "draft";
 };
 
 // Check if PR needs approval
-export const needsApproval = (status: PRStatus): boolean => {
-  return status === PRStatus.SUBMITTED;
+export const needsApproval = (status: PRStatusType): boolean => {
+  return status === "submitted" || status === "resubmitted";
 };
 
 // Check if PR can receive DO
-export const canAddDO = (status: PRStatus): boolean => {
-  return status === PRStatus.PROCESSING || status === PRStatus.DO_ISSUED;
+export const canAddDO = (status: PRStatusType): boolean => {
+  return status === "processing" || status === "do_issued";
+};
+
+// Get display label for status
+export const getPRStatusLabel = (status: PRStatusType): string => {
+  const labels: Record<PRStatusType, string> = {
+    draft: "Draft",
+    submitted: "Pending Approval",
+    approved: "Approved",
+    rejected: "Rejected",
+    processing: "Processing",
+    do_issued: "DO Issued",
+    resubmitted: "Resubmitted",
+    cancelled: "Cancelled",
+  };
+  return labels[status] || status;
+};
+
+// Get display label for priority
+export const getPRPriorityLabel = (priority: PRPriorityType): string => {
+  const labels: Record<PRPriorityType, string> = {
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+    urgent: "Urgent",
+  };
+  return labels[priority] || priority;
 };

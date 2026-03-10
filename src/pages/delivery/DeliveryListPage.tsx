@@ -32,8 +32,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { deliveryService } from "@/services/deliveryService";
-import type { DeliveryOrder } from "@/types/delivery";
-import { DOStatus, doStatusColors } from "@/types/delivery";
+import type { DeliveryOrder, DOStatusType } from "@/types/delivery";
+import { DOStatus, doStatusColors, getDONumber, getDODate } from "@/types/delivery";
 import { cn } from "@/lib/utils";
 
 export function DeliveryListPage() {
@@ -41,7 +41,7 @@ export function DeliveryListPage() {
   const [dos, setDOs] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<DOStatusType | "all">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -71,7 +71,7 @@ export function DeliveryListPage() {
     loadDOs();
   };
 
-  const getStatusIcon = (status: DOStatus) => {
+  const getStatusIcon = (status: DOStatusType) => {
     switch (status) {
       case DOStatus.DRAFT:
         return <FileText className="h-4 w-4" />;
@@ -87,6 +87,7 @@ export function DeliveryListPage() {
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return "-";
     return new Date(dateString).toLocaleDateString("id-ID", {
       day: "2-digit",
       month: "short",
@@ -191,7 +192,7 @@ export function DeliveryListPage() {
             <div className="mt-4 pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Status</label>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as DOStatusType | "all")}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
@@ -253,74 +254,78 @@ export function DeliveryListPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {dos.map((do_) => (
-                  <TableRow
-                    key={do_.id}
-                    className="cursor-pointer hover:bg-slate-50"
-                    onClick={() => navigate(`/delivery/${do_.id}`)}
-                  >
-                    <TableCell>
-                      <div className="font-medium text-slate-900">{do_.doNumber}</div>
-                      {do_.notes && (
-                        <div className="text-xs text-slate-500 truncate max-w-[200px]">
-                          {do_.notes}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-slate-400" />
-                        {formatDate(do_.doDate)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-slate-400" />
-                        <span>{do_.items.length} items</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "gap-1.5",
-                          doStatusColors[do_.status].bg,
-                          doStatusColors[do_.status].text,
-                          doStatusColors[do_.status].border
+                {dos.map((do_) => {
+                  const doNumber = getDONumber(do_);
+                  const doDate = getDODate(do_);
+                  return (
+                    <TableRow
+                      key={do_.id}
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={() => navigate(`/delivery/${do_.id}`)}
+                    >
+                      <TableCell>
+                        <div className="font-medium text-slate-900">{doNumber}</div>
+                        {do_.notes && (
+                          <div className="text-xs text-slate-500 truncate max-w-[200px]">
+                            {do_.notes}
+                          </div>
                         )}
-                      >
-                        {getStatusIcon(do_.status)}
-                        {do_.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {do_.bast ? (
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-slate-400" />
+                          {formatDate(doDate)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Package className="h-4 w-4 text-slate-400" />
+                          <span>{do_.items.length} items</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Badge
                           variant="outline"
-                          className="bg-green-50 text-green-700 border-green-200"
+                          className={cn(
+                            "gap-1.5",
+                            doStatusColors[do_.status].bg,
+                            doStatusColors[do_.status].text,
+                            doStatusColors[do_.status].border
+                          )}
                         >
-                          Uploaded
+                          {getStatusIcon(do_.status)}
+                          {do_.status}
                         </Badge>
-                      ) : do_.status === DOStatus.DELIVERED ? (
-                        <span className="text-xs text-amber-600">Pending Upload</span>
-                      ) : (
-                        <span className="text-xs text-slate-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/delivery/${do_.id}`);
-                        }}
-                      >
-                        View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        {do_.bastOutbound || do_.bast ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-green-50 text-green-700 border-green-200"
+                          >
+                            Uploaded
+                          </Badge>
+                        ) : do_.status === DOStatus.DELIVERED ? (
+                          <span className="text-xs text-amber-600">Pending Upload</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/delivery/${do_.id}`);
+                          }}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

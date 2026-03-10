@@ -16,7 +16,7 @@ export function AlertsSummary({ alerts }: AlertsSummaryProps) {
           <CardTitle className="text-base font-semibold">Alerts Summary</CardTitle>
           <Badge
             variant="outline"
-            className="bg-red-50 text-red-700 border-red-200"
+            className="bg-destructive/10 text-destructive border-destructive/20"
           >
             {alerts.length} Active
           </Badge>
@@ -29,32 +29,32 @@ export function AlertsSummary({ alerts }: AlertsSummaryProps) {
             className={cn(
               "flex items-center gap-3 p-3 rounded-lg border",
               alert.severity === "high"
-                ? "bg-red-50 border-red-200"
+                ? "bg-destructive/10 border-destructive/20"
                 : alert.severity === "medium"
-                  ? "bg-amber-50 border-amber-200"
-                  : "bg-slate-50 border-slate-200"
+                  ? "bg-warning/10 border-warning/20"
+                  : "bg-muted border-border"
             )}
           >
             <AlertCircle
               className={cn(
                 "h-5 w-5",
                 alert.severity === "high"
-                  ? "text-red-600"
+                  ? "text-destructive"
                   : alert.severity === "medium"
-                    ? "text-amber-600"
-                    : "text-slate-500"
+                    ? "text-warning"
+                    : "text-muted-foreground"
               )}
             />
-            <span className="text-sm text-slate-700 flex-1">{alert.message}</span>
+            <span className="text-sm text-foreground flex-1">{alert.message}</span>
             <Badge
               variant="outline"
               className={cn(
                 "text-xs",
                 alert.severity === "high"
-                  ? "border-red-300 text-red-700"
+                  ? "border-destructive/30 text-destructive"
                   : alert.severity === "medium"
-                    ? "border-amber-300 text-amber-700"
-                    : "border-slate-300 text-slate-600"
+                    ? "border-warning/30 text-warning"
+                    : "border-border text-muted-foreground"
               )}
             >
               {alert.severity}

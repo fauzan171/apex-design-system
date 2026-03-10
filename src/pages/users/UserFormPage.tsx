@@ -76,8 +76,8 @@ export function UserFormPage() {
         setFormData({
           email: user.email,
           fullName: user.fullName,
-          department: user.department,
-          roleIds: user.roles.map((r) => r.id),
+          department: user.department as "" | Department,
+          roleIds: (user.roles ?? []).map((r) => r.id),
         });
       } else {
         navigate("/users");

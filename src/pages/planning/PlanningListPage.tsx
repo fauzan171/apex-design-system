@@ -32,7 +32,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { planningService } from "@/services/planningService";
-import type { ProductionPlan } from "@/types/planning";
+import type { ProductionPlan, ProductionPlanStatusType } from "@/types/planning";
 import {
   ProductionPlanStatus,
   productionPlanStatusColors,
@@ -54,7 +54,7 @@ export function PlanningListPage() {
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<ProductionPlanStatusType | "all">("all");
 
   useEffect(() => {
     loadPlans();
@@ -75,19 +75,19 @@ export function PlanningListPage() {
     }
   };
 
-  const getStatusIcon = (status: ProductionPlanStatus) => {
+  const getStatusIcon = (status: ProductionPlanStatusType) => {
     switch (status) {
-      case ProductionPlanStatus.DRAFT:
+      case "draft":
         return <Clock className="h-3.5 w-3.5" />;
-      case ProductionPlanStatus.PENDING_APPROVAL:
+      case "submitted":
         return <AlertCircle className="h-3.5 w-3.5" />;
-      case ProductionPlanStatus.APPROVED:
+      case "approved":
         return <CheckCircle2 className="h-3.5 w-3.5" />;
-      case ProductionPlanStatus.IN_PROGRESS:
+      case "in_progress":
         return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
-      case ProductionPlanStatus.COMPLETED:
+      case "completed":
         return <CheckCircle2 className="h-3.5 w-3.5" />;
-      case ProductionPlanStatus.CANCELLED:
+      case "cancelled":
         return <XCircle className="h-3.5 w-3.5" />;
       default:
         return null;
@@ -203,7 +203,7 @@ export function PlanningListPage() {
                 className="pl-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ProductionPlanStatusType | "all")}>
               <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Filter Status" />
@@ -252,10 +252,10 @@ export function PlanningListPage() {
                     className="cursor-pointer hover:bg-slate-50"
                     onClick={() => handleRowClick(plan.id)}
                   >
-                    <TableCell className="font-medium">{plan.planNumber}</TableCell>
-                    <TableCell>{formatDate(plan.planDate)}</TableCell>
-                    <TableCell>{formatDate(plan.targetCompletionDate)}</TableCell>
-                    <TableCell>{plan.hoOrderReference}</TableCell>
+                    <TableCell className="font-medium">{plan.planNumber ?? "-"}</TableCell>
+                    <TableCell>{plan.planDate ? formatDate(plan.planDate) : "-"}</TableCell>
+                    <TableCell>{plan.targetCompletionDate ? formatDate(plan.targetCompletionDate) : "-"}</TableCell>
+                    <TableCell>{plan.hoOrderReference ?? "-"}</TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"

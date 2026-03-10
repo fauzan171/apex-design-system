@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -14,6 +14,7 @@ import {
   XCircle,
   Truck,
   TrendingUp,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,72 +35,75 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { purchasingService } from "@/services/purchasingService";
-import type { PurchaseRequest, PRStatusSummary } from "@/types/purchasing";
+import { usePurchaseRequests, usePRStatusSummary } from "@/hooks";
+import type { PRFilters, PRStatusType } from "@/types/purchasing";
 import { PRStatus, prStatusColors } from "@/types/purchasing";
 import { cn } from "@/lib/utils";
 
+// Status to icon mapping
+const statusIcons: Partial<Record<PRStatus, React.ReactNode>> = {
+  [PRStatus.DRAFT]: <FileText className="h-4 w-4" />,
+  [PRStatus.SUBMITTED]: <Clock className="h-4 w-4" />,
+  [PRStatus.APPROVED]: <CheckCircle className="h-4 w-4" />,
+  [PRStatus.REJECTED]: <XCircle className="h-4 w-4" />,
+  [PRStatus.PROCESSING]: <TrendingUp className="h-4 w-4" />,
+  [PRStatus.DO_ISSUED]: <Truck className="h-4 w-4" />,
+  [PRStatus.RESUBMITTED]: <RefreshCw className="h-4 w-4" />,
+  [PRStatus.CANCELLED]: <XCircle className="h-4 w-4" />,
+};
+
 export function PurchasingListPage() {
   const navigate = useNavigate();
-  const [prs, setPRs] = useState<PurchaseRequest[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [statusSummary, setStatusSummary] = useState<PRStatusSummary[]>([]);
 
-  useEffect(() => {
-    loadData();
-  }, [statusFilter, dateFrom, dateTo]);
+  // Build filters object for hooks
+  const filters: PRFilters | undefined = useMemo(() => {
+    if (statusFilter === "all" && !dateFrom && !dateTo && !search) return undefined;
+    return {
+      status: statusFilter !== "all" ? statusFilter as PRStatusType : undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      search: search || undefined,
+    };
+  }, [statusFilter, dateFrom, dateTo, search]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [prData, summaryData] = await Promise.all([
-        purchasingService.getPRs({
-          status: statusFilter,
-          dateFrom,
-          dateTo,
-          search,
-        }),
-        purchasingService.getPRStatusSummary(),
-      ]);
-      setPRs(prData);
-      setStatusSummary(summaryData);
-    } catch (error) {
-      console.error("Failed to load data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Use custom hooks for data fetching
+  const {
+    data: prs = [],
+    isLoading: loading,
+    isFetching,
+    refetch,
+  } = usePurchaseRequests({
+    filters,
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // 1 minute auto-refresh
+  });
 
-  const handleSearch = () => {
-    loadData();
-  };
+  const { data: statusSummaryData, refetch: refetchSummary } = usePRStatusSummary();
 
-  const getStatusIcon = (status: PRStatus) => {
-    switch (status) {
-      case PRStatus.DRAFT:
-        return <FileText className="h-4 w-4" />;
-      case PRStatus.SUBMITTED:
-        return <Clock className="h-4 w-4" />;
-      case PRStatus.APPROVED:
-        return <CheckCircle className="h-4 w-4" />;
-      case PRStatus.REJECTED:
-        return <XCircle className="h-4 w-4" />;
-      case PRStatus.PROCESSING:
-        return <TrendingUp className="h-4 w-4" />;
-      case PRStatus.DO_ISSUED:
-        return <Truck className="h-4 w-4" />;
-      case PRStatus.CLOSED:
-        return <Package className="h-4 w-4" />;
-      default:
-        return null;
-    }
-  };
+  // Use status summary array directly
+  const statusSummary = useMemo(() => {
+    if (!statusSummaryData) return [];
+    return statusSummaryData;
+  }, [statusSummaryData]);
 
+  // Handle search
+  const handleSearch = useCallback(() => {
+    setSearch(searchInput);
+  }, [searchInput]);
+
+  // Handle refresh
+  const handleRefresh = useCallback(() => {
+    refetch();
+    refetchSummary();
+  }, [refetch, refetchSummary]);
+
+  // Format date
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("id-ID", {
       day: "2-digit",
@@ -108,12 +112,14 @@ export function PurchasingListPage() {
     });
   };
 
+  // Calculate age
   const calculateAge = (createdAt: string): number => {
     const now = new Date();
     const created = new Date(createdAt);
     return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
   };
 
+  // Age color
   const getAgeColor = (age: number): string => {
     if (age <= 3) return "text-green-600";
     if (age <= 7) return "text-amber-600";
@@ -130,6 +136,16 @@ export function PurchasingListPage() {
             Manage purchase requests and track HO deliveries
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={isFetching}
+          className="gap-2"
+        >
+          <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+          Refresh
+        </Button>
       </div>
 
       {/* Status Summary Cards */}
@@ -148,10 +164,10 @@ export function PurchasingListPage() {
                 <div
                   className={cn(
                     "p-1.5 rounded",
-                    prStatusColors[item.status].bg
+                    prStatusColors[item.status]?.bg
                   )}
                 >
-                  {getStatusIcon(item.status)}
+                  {statusIcons[item.status]}
                 </div>
                 <div>
                   <div className="text-lg font-bold text-slate-900">{item.count}</div>
@@ -172,8 +188,8 @@ export function PurchasingListPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   placeholder="Search by PR number or Plan number..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   className="pl-10"
                 />
@@ -211,7 +227,7 @@ export function PurchasingListPage() {
                     <SelectItem value={PRStatus.REJECTED}>Rejected</SelectItem>
                     <SelectItem value={PRStatus.PROCESSING}>Processing</SelectItem>
                     <SelectItem value={PRStatus.DO_ISSUED}>DO Issued</SelectItem>
-                    <SelectItem value={PRStatus.CLOSED}>Closed</SelectItem>
+                    <SelectItem value={PRStatus.CANCELLED}>Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -265,7 +281,7 @@ export function PurchasingListPage() {
               </TableHeader>
               <TableBody>
                 {prs.map((pr) => {
-                  const age = calculateAge(pr.createdAt);
+                  const age = calculateAge(pr.createdAt ?? "");
                   return (
                     <TableRow
                       key={pr.id}
@@ -273,7 +289,7 @@ export function PurchasingListPage() {
                       onClick={() => navigate(`/purchasing/${pr.id}`)}
                     >
                       <TableCell>
-                        <div className="font-medium text-slate-900">{pr.prNumber}</div>
+                        <div className="font-medium text-slate-900">{pr.prNumber ?? "-"}</div>
                         {pr.notes && (
                           <div className="text-xs text-slate-500 truncate max-w-[200px]">
                             {pr.notes}
@@ -283,13 +299,13 @@ export function PurchasingListPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-slate-400" />
-                          {formatDate(pr.requestDate)}
+                          {formatDate(pr.requestDate ?? pr.createdAt ?? "")}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-slate-400" />
-                          {formatDate(pr.requiredDate)}
+                          {formatDate(pr.requiredDate ?? pr.required_date ?? "")}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -304,7 +320,7 @@ export function PurchasingListPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Package className="h-4 w-4 text-slate-400" />
-                          <span>{pr.items.length}</span>
+                          <span>{pr.items?.length || 0}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -312,12 +328,12 @@ export function PurchasingListPage() {
                           variant="outline"
                           className={cn(
                             "gap-1.5",
-                            prStatusColors[pr.status].bg,
-                            prStatusColors[pr.status].text,
-                            prStatusColors[pr.status].border
+                            prStatusColors[pr.status]?.bg,
+                            prStatusColors[pr.status]?.text,
+                            prStatusColors[pr.status]?.border
                           )}
                         >
-                          {getStatusIcon(pr.status)}
+                          {statusIcons[pr.status]}
                           {pr.status}
                         </Badge>
                       </TableCell>

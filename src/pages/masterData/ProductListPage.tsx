@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { productService } from "@/services/masterDataService";
-import type { Product, ProductCategory, ProductStatus } from "@/types/masterData";
+import type { Product, ProductCategory, ProductStatus, UnitOfMeasure } from "@/types/masterData";
 import {
   ProductCategory as ProductCategoryEnum,
   ProductStatus as ProductStatusEnum,
@@ -307,19 +307,19 @@ export function ProductListPage() {
                       <Badge
                         variant="outline"
                         className={cn(
-                          productCategoryColors[product.category],
+                          product.category ? productCategoryColors[product.category as ProductCategory] : "",
                           "border-0"
                         )}
                       >
-                        {productCategoryLabels[product.category]}
+                        {product.category ? productCategoryLabels[product.category as ProductCategory] : "-"}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <p className="text-sm">
-                          {product.currentStock} {unitOfMeasureLabels[product.unitOfMeasure]}
+                          {product.currentStock ?? 0} {product.unitOfMeasure ? unitOfMeasureLabels[product.unitOfMeasure as UnitOfMeasure] : ""}
                         </p>
-                        {product.currentStock <= product.reorderPoint && (
+                        {(product.currentStock ?? 0) <= (product.reorderPoint ?? 0) && (
                           <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">
                             Low Stock
                           </Badge>
@@ -329,11 +329,11 @@ export function ProductListPage() {
                     <TableCell>
                       <div className="space-y-1">
                         <p className="text-sm text-slate-600">
-                          Cost: {formatCurrency(product.costPrice)}
+                          Cost: {formatCurrency(product.costPrice ?? 0)}
                         </p>
                         {product.isSellable && (
                           <p className="text-sm text-green-600">
-                            Price: {formatCurrency(product.sellingPrice)}
+                            Price: {formatCurrency(product.sellingPrice ?? 0)}
                           </p>
                         )}
                       </div>

@@ -40,8 +40,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deliveryService } from "@/services/deliveryService";
-import type { DeliveryOrder } from "@/types/delivery";
-import { DOStatus, doStatusColors, canTransitionTo } from "@/types/delivery";
+import type { DeliveryOrder, DOStatusType } from "@/types/delivery";
+import { DOStatus, doStatusColors, canTransitionTo, getDONumber, getDODate } from "@/types/delivery";
 import { cn } from "@/lib/utils";
 
 export function DeliveryDetailPage() {
@@ -55,12 +55,10 @@ export function DeliveryDetailPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [showStatusDialog, setShowStatusDialog] = useState(false);
-  const [newStatus, setNewStatus] = useState<DOStatus | null>(null);
+  const [newStatus, setNewStatus] = useState<DOStatusType | null>(null);
   const [statusNotes, setStatusNotes] = useState("");
   const [showBASTDialog, setShowBASTDialog] = useState(false);
   const [bastFile, setBASTFile] = useState<File | null>(null);
-  const [bastReceivedDate, setBASTReceivedDate] = useState("");
-  const [bastNotes, setBASTNotes] = useState("");
 
   useEffect(() => {
     loadDO();
@@ -111,14 +109,12 @@ export function DeliveryDetailPage() {
   };
 
   const handleUploadBAST = async () => {
-    if (!do_ || !bastFile || !bastReceivedDate) return;
+    if (!do_ || !bastFile) return;
     setActionLoading(true);
     try {
-      await deliveryService.uploadBAST(do_.id, bastFile, bastReceivedDate, bastNotes);
+      await deliveryService.uploadBAST(do_.id, bastFile);
       setShowBASTDialog(false);
       setBASTFile(null);
-      setBASTReceivedDate("");
-      setBASTNotes("");
       loadDO();
     } catch (error) {
       console.error("Failed to upload BAST:", error);
@@ -129,7 +125,7 @@ export function DeliveryDetailPage() {
 
   const handlePrint = () => {
     if (do_) {
-      deliveryService.printDO(do_);
+      deliveryService.printDO(do_.id);
     }
   };
 
@@ -160,7 +156,7 @@ export function DeliveryDetailPage() {
     });
   };
 
-  const getStatusIcon = (status: DOStatus) => {
+  const getStatusIcon = (status: DOStatusType) => {
     switch (status) {
       case DOStatus.DRAFT:
         return <FileText className="h-4 w-4" />;
@@ -177,15 +173,15 @@ export function DeliveryDetailPage() {
     }
   };
 
-  const getProgressPercentage = (status: DOStatus): number => {
-    const statusOrder = [
+  const getProgressPercentage = (status: DOStatusType): number => {
+    const statusOrder: DOStatusType[] = [
       DOStatus.DRAFT,
       DOStatus.RELEASED,
       DOStatus.IN_TRANSIT,
       DOStatus.DELIVERED,
       DOStatus.RECEIVED,
     ];
-    const index = statusOrder.indexOf(status);
+    const index = statusOrder.indexOf(status as DOStatusType);
     if (index === -1) return 0;
     return ((index + 1) / statusOrder.length) * 100;
   };
@@ -212,6 +208,9 @@ export function DeliveryDetailPage() {
     );
   }
 
+  const doNumber = getDONumber(do_);
+  const doDate = getDODate(do_);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -222,7 +221,7 @@ export function DeliveryDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900">{do_.doNumber}</h1>
+              <h1 className="text-2xl font-bold text-slate-900">{doNumber}</h1>
               <Badge
                 variant="outline"
                 className={cn(
@@ -283,7 +282,7 @@ export function DeliveryDetailPage() {
           )}
 
           {/* Upload BAST button for Delivered status */}
-          {do_.status === DOStatus.DELIVERED && !do_.bast && (
+          {do_.status === DOStatus.DELIVERED && !do_.bastOutbound && (
             <Button
               variant="outline"
               className="gap-2"
@@ -364,7 +363,7 @@ export function DeliveryDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">DO Date</p>
-                <p className="font-medium text-slate-900">{formatDate(do_.doDate)}</p>
+                <p className="font-medium text-slate-900">{doDate ? formatDate(doDate) : "-"}</p>
               </div>
             </div>
           </CardContent>
@@ -430,7 +429,7 @@ export function DeliveryDetailPage() {
       )}
 
       {/* BAST Info */}
-      {do_.bast && (
+      {do_.bastOutbound && (
         <Card className="border-green-200 bg-green-50">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-green-800">
@@ -442,22 +441,22 @@ export function DeliveryDetailPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-green-600">BAST Number</p>
-                <p className="font-medium text-green-800">{do_.bast.bastNumber}</p>
+                <p className="font-medium text-green-800">{do_.bastOutbound.bast_number}</p>
               </div>
               <div>
-                <p className="text-green-600">Received Date</p>
-                <p className="font-medium text-green-800">{formatDate(do_.bast.receivedDate)}</p>
+                <p className="text-green-600">BAST Date</p>
+                <p className="font-medium text-green-800">{formatDate(do_.bastOutbound.bast_date)}</p>
               </div>
               <div>
                 <p className="text-green-600">Uploaded At</p>
                 <p className="font-medium text-green-800">
-                  {formatDateTime(do_.bast.uploadedAt || "")}
+                  {do_.bastOutbound.uploadedAt ? formatDateTime(do_.bastOutbound.uploadedAt) : "-"}
                 </p>
               </div>
-              {do_.bast.notes && (
+              {do_.bastOutbound.notes && (
                 <div>
                   <p className="text-green-600">Notes</p>
-                  <p className="font-medium text-green-800">{do_.bast.notes}</p>
+                  <p className="font-medium text-green-800">{do_.bastOutbound.notes}</p>
                 </div>
               )}
             </div>
@@ -489,8 +488,8 @@ export function DeliveryDetailPage() {
             <TableBody>
               {do_.items.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.productCode}</TableCell>
-                  <TableCell>{item.productName}</TableCell>
+                  <TableCell className="font-medium">{item.productCode || item.product?.code}</TableCell>
+                  <TableCell>{item.productName || item.product?.name}</TableCell>
                   <TableCell className="text-right">{item.quantity.toLocaleString()}</TableCell>
                   <TableCell>{item.unit}</TableCell>
                   {do_.status !== DOStatus.DRAFT && (
@@ -511,7 +510,7 @@ export function DeliveryDetailPage() {
       </Card>
 
       {/* Status History */}
-      {do_.statusHistory.length > 0 && (
+      {do_.statusHistory && do_.statusHistory.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Status History</CardTitle>
@@ -531,7 +530,7 @@ export function DeliveryDetailPage() {
                           : "bg-blue-500"
                       )}
                     />
-                    {index < do_.statusHistory.length - 1 && (
+                    {index < (do_.statusHistory?.length || 0) - 1 && (
                       <div className="w-px h-6 bg-slate-200" />
                     )}
                   </div>
@@ -644,25 +643,6 @@ export function DeliveryDetailPage() {
                 <p className="text-sm text-slate-500">Selected: {bastFile.name}</p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="receivedDate">Received Date</Label>
-              <Input
-                id="receivedDate"
-                type="date"
-                value={bastReceivedDate}
-                onChange={(e) => setBASTReceivedDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bastNotes">Notes (Optional)</Label>
-              <Textarea
-                id="bastNotes"
-                placeholder="Enter notes..."
-                value={bastNotes}
-                onChange={(e) => setBASTNotes(e.target.value)}
-                rows={3}
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBASTDialog(false)}>
@@ -670,7 +650,7 @@ export function DeliveryDetailPage() {
             </Button>
             <Button
               onClick={handleUploadBAST}
-              disabled={!bastFile || !bastReceivedDate || actionLoading}
+              disabled={!bastFile || actionLoading}
             >
               {actionLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

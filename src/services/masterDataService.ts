@@ -1,19 +1,21 @@
 /**
  * Master Data Service
  * Handles all Product and Bill of Materials (BoM) operations
- * Automatically switches between mock data and real API based on environment
+ * Real API integration
+ *
+ * OpenAPI endpoints (base: /api/v1):
+ * - /products/*
+ * - /boms/*
+ * - /products/{productId}/bom/*
  */
 
 import type {
   Product,
   ProductType,
-  ProductStatusType,
   ProductFilter,
   CreateProductRequest,
   UpdateProductRequest,
   BoM,
-  BoMItem,
-  BoMStatusType,
   BoMFilter,
   CreateBoMRequest,
   UpdateBoMRequest,
@@ -21,24 +23,15 @@ import type {
   AddBoMItemRequest,
   UpdateBoMItemRequest,
 } from "@/types/masterData";
-import { BoMStatus } from "@/types/masterData";
 import { apiClient } from "@/lib/apiClient";
 
-// Check if using mock data
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === "true";
-
-// Import mock services only when needed
-let mockProductService: typeof import("@/data/mockMasterData").productService | null = null;
-let mockBomService: typeof import("@/data/mockMasterData").bomService | null = null;
-
-const getMockServices = async () => {
-  if (!mockProductService || !mockBomService) {
-    const module = await import("@/data/mockMasterData");
-    mockProductService = module.productService;
-    mockBomService = module.bomService;
-  }
-  return { productService: mockProductService, bomService: mockBomService };
-};
+// Helper to extract array from paginated or direct responses
+function extractArray<T>(data: any): T[] {
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.items)) return data.items;
+  if (data && Array.isArray(data.data)) return data.data;
+  return [];
+}
 
 // ============================================
 // PRODUCT SERVICE
@@ -47,62 +40,67 @@ const getMockServices = async () => {
 export const productService = {
   /**
    * Get all products with optional filters
+   * GET /products
    */
   getProducts: async (filter?: ProductFilter): Promise<Product[]> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.getProducts(filter);
-    }
-
     const params = new URLSearchParams();
     if (filter?.type && filter.type !== "all") params.append("type", filter.type);
     if (filter?.status && filter.status !== "all") params.append("status", filter.status);
     if (filter?.search) params.append("search", filter.search);
-    if (filter?.isPurchasable !== undefined) params.append("is_purchasable", String(filter.isPurchasable));
-    if (filter?.isSellable !== undefined) params.append("is_sellable", String(filter.isSellable));
-    if (filter?.hasBoM !== undefined) params.append("has_bom", String(filter.hasBoM));
 
     const response = await apiClient.get<Product[]>(`/products?${params.toString()}`);
-    return response.data || [];
+    return extractArray<Product>(response.data);
   },
 
   /**
    * Get a single product by ID
+   * GET /products/{id}
    */
   getProductById: async (id: string): Promise<Product | null> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      const product = await productService.getProductById(id);
-      return product || null;
-    }
-
     const response = await apiClient.get<Product>(`/products/${id}`);
     return response.data || null;
   },
 
   /**
-   * Get a single product by code
+   * Get products by type (uses /products/by-type endpoint)
+   * GET /products/by-type?type={type}
    */
-  getProductByCode: async (code: string): Promise<Product | null> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      const product = await productService.getProductByCode(code);
-      return product || null;
-    }
+  getProductsByType: async (type: ProductType): Promise<Product[]> => {
+    const response = await apiClient.get<Product[]>(`/products/by-type?type=${type}`);
+    return extractArray<Product>(response.data);
+  },
 
-    const response = await apiClient.get<Product>(`/products/code/${code}`);
-    return response.data || null;
+  /**
+   * Search products
+   * GET /products/search?q={query}
+   */
+  searchProducts: async (query: string): Promise<Product[]> => {
+    const response = await apiClient.get<Product[]>(`/products/search?q=${encodeURIComponent(query)}`);
+    return extractArray<Product>(response.data);
+  },
+
+  /**
+   * Get product summary stats
+   * GET /products/summary
+   */
+  getProductSummary: async (): Promise<{ total: number; byType: Record<string, number> }> => {
+    const response = await apiClient.get<{ total: number; byType: Record<string, number> }>("/products/summary");
+    return response.data || { total: 0, byType: {} };
+  },
+
+  /**
+   * Get active products (for dropdowns, etc.)
+   */
+  getActiveProducts: async (): Promise<Product[]> => {
+    const response = await apiClient.get<Product[]>("/products?status=active");
+    return extractArray<Product>(response.data);
   },
 
   /**
    * Create a new product
+   * POST /products
    */
   createProduct: async (data: CreateProductRequest): Promise<Product> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.createProduct(data);
-    }
-
     const response = await apiClient.post<Product>("/products", data);
     if (!response.data) throw new Error("Failed to create product");
     return response.data;
@@ -110,13 +108,9 @@ export const productService = {
 
   /**
    * Update a product
+   * PUT /products/{id}
    */
   updateProduct: async (id: string, data: UpdateProductRequest): Promise<Product> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.updateProduct(id, data);
-    }
-
     const response = await apiClient.put<Product>(`/products/${id}`, data);
     if (!response.data) throw new Error("Failed to update product");
     return response.data;
@@ -124,124 +118,56 @@ export const productService = {
 
   /**
    * Delete a product
+   * DELETE /products/{id}
    */
   deleteProduct: async (id: string): Promise<void> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.deleteProduct(id);
-    }
-
     await apiClient.delete(`/products/${id}`);
   },
 
   /**
-   * Get low stock products
+   * Deactivate a product
+   * POST /products/{id}/deactivate
    */
-  getLowStockProducts: async (): Promise<Product[]> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.getLowStockProducts();
-    }
-
-    const response = await apiClient.get<Product[]>("/products/low-stock");
-    return response.data || [];
+  deactivateProduct: async (id: string): Promise<void> => {
+    await apiClient.post(`/products/${id}/deactivate`);
   },
 
   /**
-   * Adjust product stock
+   * Activate a product
+   * POST /products/{id}/activate
    */
-  adjustStock: async (id: string, quantity: number, reason: string): Promise<Product> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.adjustStock(id, quantity, reason);
-    }
-
-    const response = await apiClient.post<Product>(`/products/${id}/adjust-stock`, {
-      quantity,
-      reason,
-    });
-    if (!response.data) throw new Error("Failed to adjust stock");
-    return response.data;
+  activateProduct: async (id: string): Promise<void> => {
+    await apiClient.post(`/products/${id}/activate`);
   },
 
   /**
-   * Get product statistics
+   * Import products from CSV/Excel
+   * POST /products/import (multipart/form-data)
    */
-  getProductStats: async (): Promise<{
-    total: number;
-    active: number;
-    inactive: number;
-    discontinued: number;
-    byType: Record<ProductType, number>;
-    lowStock: number;
-    withBoM: number;
-  }> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      const stats = await productService.getProductStats();
-      return {
-        ...stats,
-        byType: stats.byCategory as unknown as Record<ProductType, number>,
-      };
-    }
-
-    const response = await apiClient.get<{
-      total: number;
-      active: number;
-      inactive: number;
-      discontinued: number;
-      byType: Record<ProductType, number>;
-      lowStock: number;
-      withBoM: number;
-    }>("/products/stats");
-    return response.data || {
-      total: 0,
-      active: 0,
-      inactive: 0,
-      discontinued: 0,
-      byType: {} as Record<ProductType, number>,
-      lowStock: 0,
-      withBoM: 0,
-    };
+  importProducts: async (file: File): Promise<{ imported: number; errors: string[] }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await apiClient.post<{ imported: number; errors: string[] }>("/products/import", formData);
+    return response.data || { imported: 0, errors: [] };
   },
 
   /**
-   * Get products by type
+   * Download import template
+   * GET /products/import/template
    */
-  getProductsByType: async (type: ProductType): Promise<Product[]> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.getProducts({ type });
-    }
-
-    const response = await apiClient.get<Product[]>(`/products?type=${type}`);
-    return response.data || [];
+  getImportTemplate: (): string => {
+    return "/api/v1/products/import/template";
   },
 
   /**
-   * Get active products (for dropdowns, etc.)
+   * Export products
+   * GET /products/export
    */
-  getActiveProducts: async (): Promise<Product[]> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.getProducts({ status: "active" });
-    }
-
-    const response = await apiClient.get<Product[]>("/products?status=active");
-    return response.data || [];
-  },
-
-  /**
-   * Search products
-   */
-  searchProducts: async (query: string): Promise<Product[]> => {
-    if (USE_MOCK_DATA) {
-      const { productService } = await getMockServices();
-      return productService.getProducts({ search: query });
-    }
-
-    const response = await apiClient.get<Product[]>(`/products?search=${encodeURIComponent(query)}`);
-    return response.data || [];
+  exportProducts: (filter?: ProductFilter): string => {
+    const params = new URLSearchParams();
+    if (filter?.type && filter.type !== "all") params.append("type", filter.type);
+    if (filter?.status && filter.status !== "all") params.append("status", filter.status);
+    return `/api/v1/products/export?${params.toString()}`;
   },
 };
 
@@ -252,259 +178,141 @@ export const productService = {
 export const bomService = {
   /**
    * Get all BoMs with optional filters
+   * GET /boms
    */
   getBoMs: async (filter?: BoMFilter): Promise<BoM[]> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.getBoMs(filter);
-    }
-
     const params = new URLSearchParams();
     if (filter?.productId) params.append("product_id", filter.productId);
     if (filter?.status && filter.status !== "all") params.append("status", filter.status);
     if (filter?.search) params.append("search", filter.search);
 
     const response = await apiClient.get<BoM[]>(`/boms?${params.toString()}`);
-    return response.data || [];
+    return extractArray<BoM>(response.data);
   },
 
   /**
-   * Get a single BoM by ID
+   * Get BoM for a specific product
+   * GET /products/{productId}/bom
    */
-  getBoMById: async (id: string): Promise<BoM | null> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      const bom = await bomService.getBoMById(id);
-      return bom || null;
-    }
-
-    const response = await apiClient.get<BoM>(`/boms/${id}`);
+  getBoMByProduct: async (productId: string): Promise<BoM | null> => {
+    const response = await apiClient.get<BoM>(`/products/${productId}/bom`);
     return response.data || null;
   },
 
   /**
-   * Get BoMs by product ID
+   * Get all BoMs for a product
+   * GET /products/{productId}/bom (returns full BoM object)
    */
   getBoMsByProduct: async (productId: string): Promise<BoM[]> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.getBoMsByProduct(productId);
-    }
-
-    const response = await apiClient.get<BoM[]>(`/products/${productId}/boms`);
-    return response.data || [];
+    const response = await apiClient.get<BoM>(`/products/${productId}/bom`);
+    if (response.data) return [response.data];
+    return [];
   },
 
   /**
-   * Get default BoM for a product
+   * Create a BoM for a product
+   * POST /products/{productId}/bom  (or via POST /boms with product_id)
    */
-  getDefaultBoM: async (productId: string): Promise<BoM | null> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      const bom = await bomService.getDefaultBoM(productId);
-      return bom || null;
-    }
-
-    const response = await apiClient.get<BoM>(`/products/${productId}/boms/default`);
-    return response.data || null;
-  },
-
-  /**
-   * Create a new BoM
-   */
-  createBoM: async (data: CreateBoMRequest): Promise<BoM> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.createBoM(data);
-    }
-
-    const response = await apiClient.post<BoM>("/boms", data);
+  createBoM: async (productId: string, data: CreateBoMRequest): Promise<BoM> => {
+    const response = await apiClient.post<BoM>(`/products/${productId}/bom`, data);
     if (!response.data) throw new Error("Failed to create BoM");
     return response.data;
   },
 
   /**
-   * Update a BoM
+   * Update BoM (via product path)
    */
-  updateBoM: async (id: string, data: UpdateBoMRequest): Promise<BoM> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.updateBoM(id, data);
-    }
-
-    const response = await apiClient.put<BoM>(`/boms/${id}`, data);
+  updateBoM: async (_id: string, data: UpdateBoMRequest): Promise<BoM> => {
+    // Use productId if available — for direct update, POST to boms/{id}
+    const response = await apiClient.put<BoM>(`/boms/${_id}`, data);
     if (!response.data) throw new Error("Failed to update BoM");
     return response.data;
   },
 
   /**
-   * Delete a BoM
+   * Update BoM status (activate/deactivate/etc)
+   * PUT /products/{productId}/bom/status
    */
-  deleteBoM: async (id: string): Promise<void> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.deleteBoM(id);
-    }
-
-    await apiClient.delete(`/boms/${id}`);
-  },
-
-  /**
-   * Update BoM status
-   */
-  updateBoMStatus: async (id: string, data: UpdateBoMStatusRequest): Promise<BoM> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      if (data.status === "active") {
-        return bomService.activateBoM(id);
-      } else if (data.status === "obsolete") {
-        return bomService.obsoleteBoM(id);
-      }
-      throw new Error("Status not supported in mock");
-    }
-
-    const response = await apiClient.patch<BoM>(`/boms/${id}/status`, data);
+  updateBoMStatus: async (productId: string, data: UpdateBoMStatusRequest): Promise<BoM> => {
+    const response = await apiClient.put<BoM>(`/products/${productId}/bom/status`, data);
     if (!response.data) throw new Error("Failed to update BoM status");
     return response.data;
   },
 
   /**
-   * Activate BoM
+   * Delete a BoM
+   * DELETE /boms/{id}
    */
-  activateBoM: async (id: string): Promise<BoM> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.activateBoM(id);
-    }
-
-    const response = await apiClient.post<BoM>(`/boms/${id}/activate`);
-    if (!response.data) throw new Error("Failed to activate BoM");
-    return response.data;
+  deleteBoM: async (id: string): Promise<void> => {
+    await apiClient.delete(`/boms/${id}`);
   },
 
   /**
-   * Obsolete BoM
+   * Get BoM materials (for Planning MR calculation)
+   * GET /products/{productId}/bom/materials
    */
-  obsoleteBoM: async (id: string): Promise<BoM> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.obsoleteBoM(id);
-    }
-
-    const response = await apiClient.post<BoM>(`/boms/${id}/obsolete`);
-    if (!response.data) throw new Error("Failed to obsolete BoM");
-    return response.data;
+  getBoMForProduct: async (productId: string): Promise<import("@/types/masterData").BoMItem[]> => {
+    const response = await apiClient.get<import("@/types/masterData").BoMItem[]>(
+      `/products/${productId}/bom/materials`
+    );
+    return extractArray<import("@/types/masterData").BoMItem>(response.data);
   },
 
   /**
    * Add item to BoM
+   * POST /products/{productId}/bom/items
    */
-  addBoMItem: async (bomId: string, data: AddBoMItemRequest): Promise<BoMItem> => {
-    if (USE_MOCK_DATA) {
-      throw new Error("Add BoM item not implemented in mock");
-    }
-
-    const response = await apiClient.post<BoMItem>(`/boms/${bomId}/items`, data);
+  addBoMItem: async (productId: string, data: AddBoMItemRequest): Promise<import("@/types/masterData").BoMItem> => {
+    const response = await apiClient.post<import("@/types/masterData").BoMItem>(
+      `/products/${productId}/bom/items`,
+      data
+    );
     if (!response.data) throw new Error("Failed to add BoM item");
     return response.data;
   },
 
   /**
    * Update BoM item
+   * PUT /products/{productId}/bom/items/{itemId}
    */
-  updateBoMItem: async (bomId: string, itemId: string, data: UpdateBoMItemRequest): Promise<BoMItem> => {
-    if (USE_MOCK_DATA) {
-      throw new Error("Update BoM item not implemented in mock");
-    }
-
-    const response = await apiClient.put<BoMItem>(`/boms/${bomId}/items/${itemId}`, data);
+  updateBoMItem: async (
+    productId: string,
+    itemId: string,
+    data: UpdateBoMItemRequest
+  ): Promise<import("@/types/masterData").BoMItem> => {
+    const response = await apiClient.put<import("@/types/masterData").BoMItem>(
+      `/products/${productId}/bom/items/${itemId}`,
+      data
+    );
     if (!response.data) throw new Error("Failed to update BoM item");
     return response.data;
   },
 
   /**
    * Remove item from BoM
+   * DELETE /products/{productId}/bom/items/{itemId}
    */
-  removeBoMItem: async (bomId: string, itemId: string): Promise<void> => {
-    if (USE_MOCK_DATA) {
-      throw new Error("Remove BoM item not implemented in mock");
-    }
-
-    await apiClient.delete(`/boms/${bomId}/items/${itemId}`);
+  removeBoMItem: async (productId: string, itemId: string): Promise<void> => {
+    await apiClient.delete(`/products/${productId}/bom/items/${itemId}`);
   },
 
   /**
-   * Calculate production cost
+   * Import BoMs from CSV/Excel
+   * POST /boms/import
    */
-  calculateProductionCost: async (
-    productId: string,
-    quantity: number,
-    bomVersion?: string
-  ): Promise<{
-    materialCost: number;
-    laborCost: number;
-    overheadCost: number;
-    totalCost: number;
-    unitCost: number;
-    components: { productId: string; quantity: number; cost: number }[];
-  }> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      return bomService.calculateProductionCost(productId, quantity, bomVersion);
-    }
-
-    const params = new URLSearchParams();
-    params.append("quantity", String(quantity));
-    if (bomVersion) params.append("version", bomVersion);
-
-    const response = await apiClient.get<{
-      materialCost: number;
-      laborCost: number;
-      overheadCost: number;
-      totalCost: number;
-      unitCost: number;
-      components: { productId: string; quantity: number; cost: number }[];
-    }>(`/products/${productId}/calculate-cost?${params.toString()}`);
-    return response.data || {
-      materialCost: 0,
-      laborCost: 0,
-      overheadCost: 0,
-      totalCost: 0,
-      unitCost: 0,
-      components: [],
-    };
+  importBoMs: async (file: File): Promise<{ imported: number; errors: string[] }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await apiClient.post<{ imported: number; errors: string[] }>("/boms/import", formData);
+    return response.data || { imported: 0, errors: [] };
   },
 
   /**
-   * Get BoM statistics
+   * Export BoMs
+   * GET /boms/export
    */
-  getBoMStats: async (): Promise<{
-    total: number;
-    active: number;
-    draft: number;
-    inactive: number;
-    obsolete: number;
-  }> => {
-    if (USE_MOCK_DATA) {
-      const { bomService } = await getMockServices();
-      const boms = await bomService.getBoMs();
-      return {
-        total: boms.length,
-        active: boms.filter((b) => b.status === "active").length,
-        draft: boms.filter((b) => b.status === "draft").length,
-        inactive: boms.filter((b) => b.status === "inactive").length,
-        obsolete: boms.filter((b) => b.status === "obsolete").length,
-      };
-    }
-
-    const response = await apiClient.get<{
-      total: number;
-      active: number;
-      draft: number;
-      inactive: number;
-      obsolete: number;
-    }>("/boms/stats");
-    return response.data || { total: 0, active: 0, draft: 0, inactive: 0, obsolete: 0 };
+  exportBoMs: (): string => {
+    return "/api/v1/boms/export";
   },
 };
 
@@ -515,4 +323,4 @@ export const masterDataService = {
 };
 
 // Export types
-export type { Product, ProductType, ProductFilter, BoM, BoMItem, BoMFilter };
+export type { Product, ProductType, ProductFilter, BoM, BoMFilter };

@@ -63,7 +63,7 @@ export function BoMFormPage() {
   const [formData, setFormData] = useState({
     version: "",
     quantity: 1,
-    unitOfMeasure: "pcs" as UnitOfMeasure,
+    unitOfMeasure: "PCS" as UnitOfMeasure,
     laborCost: 0,
     overheadCost: 0,
     notes: "",
@@ -92,22 +92,22 @@ export function BoMFormPage() {
           const bom = await bomService.getBoMById(id);
           if (bom) {
             setFormData({
-              version: bom.version,
-              quantity: bom.quantity,
-              unitOfMeasure: bom.unitOfMeasure,
-              laborCost: bom.laborCost,
-              overheadCost: bom.overheadCost,
-              notes: bom.notes || "",
-              effectiveDate: bom.effectiveDate.split("T")[0],
+              version: String(bom.version ?? ""),
+              quantity: bom.quantity ?? 1,
+              unitOfMeasure: (bom.unitOfMeasure ?? "PCS") as UnitOfMeasure,
+              laborCost: bom.laborCost ?? 0,
+              overheadCost: bom.overheadCost ?? 0,
+              notes: bom.notes ?? "",
+              effectiveDate: bom.effectiveDate ? bom.effectiveDate.split("T")[0] : new Date().toISOString().split("T")[0],
             });
             setComponents(
-              bom.components.map((c) => ({
-                id: c.id,
-                productId: c.productId,
-                quantity: c.quantity,
-                wastagePercent: c.wastagePercent,
-                notes: c.notes || "",
-                sortOrder: c.sortOrder,
+              (bom.components ?? bom.items ?? []).map((c) => ({
+                id: c.id ?? `temp_${Date.now()}`,
+                productId: c.productId ?? c.materialId ?? "",
+                quantity: c.quantity ?? c.quantityRequired ?? 0,
+                wastagePercent: c.wastagePercent ?? 0,
+                notes: c.notes ?? "",
+                sortOrder: c.sortOrder ?? 0,
               }))
             );
           } else {
@@ -167,7 +167,7 @@ export function BoMFormPage() {
 
     components.forEach((comp) => {
       const product = availableProducts.find((p) => p.id === comp.productId);
-      if (product) {
+      if (product && product.costPrice !== undefined) {
         const quantityWithWastage = comp.quantity * (1 + comp.wastagePercent / 100);
         materialCost += product.costPrice * quantityWithWastage;
       }
@@ -221,24 +221,20 @@ export function BoMFormPage() {
 
       if (isEdit) {
         await bomService.updateBoM(id!, {
-          components: componentData,
           laborCost: formData.laborCost,
           overheadCost: formData.overheadCost,
           notes: formData.notes,
         });
       } else {
         const createData: CreateBoMRequest = {
-          productId: productId!,
-          version: formData.version,
-          quantity: formData.quantity,
-          unitOfMeasure: formData.unitOfMeasure,
-          components: componentData,
-          laborCost: formData.laborCost,
-          overheadCost: formData.overheadCost,
-          notes: formData.notes,
-          effectiveDate: new Date(formData.effectiveDate).toISOString(),
+          status: "draft",
+          items: componentData.map((c) => ({
+            materialId: c.productId,
+            quantityRequired: c.quantity,
+            unit: formData.unitOfMeasure,
+          })),
         };
-        await bomService.createBoM(createData);
+        await bomService.createBoM(productId!, createData);
       }
       navigate(`/products/${productId}/bom`);
     } catch (err) {
@@ -414,7 +410,7 @@ export function BoMFormPage() {
                 {components.map((comp, index) => {
                   const product = availableProducts.find((p) => p.id === comp.productId);
                   const quantityWithWastage = comp.quantity * (1 + comp.wastagePercent / 100);
-                  const cost = product ? product.costPrice * quantityWithWastage : 0;
+                  const cost = product && product.costPrice !== undefined ? product.costPrice * quantityWithWastage : 0;
 
                   return (
                     <TableRow key={comp.id}>
@@ -449,7 +445,7 @@ export function BoMFormPage() {
                           <SelectContent>
                             {availableProducts.map((p) => (
                               <SelectItem key={p.id} value={p.id}>
-                                {p.code} - {p.name} ({formatCurrency(p.costPrice)}/{p.unitOfMeasure})
+                                {p.code} - {p.name} ({formatCurrency(p.costPrice ?? 0)}/{p.unitOfMeasure ?? "unit"})
                               </SelectItem>
                             ))}
                           </SelectContent>

@@ -26,19 +26,25 @@ import { InventoryKPIsCard } from "@/components/dashboard/InventoryKPIs";
 import { PurchasingKPIsCard } from "@/components/dashboard/PurchasingKPIs";
 import { AlertsSummary } from "@/components/dashboard/AlertsSummary";
 import { PeriodComparison } from "@/components/dashboard/PeriodComparison";
-import { mockDashboardData, projectOptions, dateRangeOptions } from "@/services/dashboardService";
+import { dashboardService, projectOptions, dateRangeOptions } from "@/services/dashboardService";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "@/types";
+import { useQuery } from "@tanstack/react-query";
 
 export function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [selectedProject, setSelectedProject] = useState<string>("all");
-  const [lastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleRefresh = () => {
+  const { data: dashboardData, isLoading, refetch } = useQuery({
+    queryKey: ["dashboard", dateRange, selectedProject],
+    queryFn: () => dashboardService.getDashboardData(dateRange, selectedProject),
+  });
+
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 1000);
+    await refetch();
+    setTimeout(() => setIsRefreshing(false), 500);
   };
 
   const formatLastUpdated = (date: Date) => {
@@ -51,7 +57,55 @@ export function DashboardPage() {
     });
   };
 
-  const { production, delivery, inventory, purchasing, projects, alerts, comparison } = mockDashboardData;
+  const production = dashboardData?.production ?? {
+    efficiency: 0,
+    efficiencyTrend: 0,
+    onTimeRate: 0,
+    onTimeTrend: 0,
+    qcPassRate: 0,
+    qcTrend: 0,
+    totalWOs: 0,
+    dailyTrend: [],
+    statusBreakdown: [],
+  };
+  const delivery = dashboardData?.delivery ?? {
+    onTimeRate: 0,
+    onTimeTrend: 0,
+    avgLeadTime: 0,
+    leadTimeTrend: 0,
+    bastCompletion: 0,
+    totalDOs: 0,
+    dailyTrend: [],
+    statusBreakdown: [],
+  };
+  const inventory = dashboardData?.inventory ?? {
+    stockValue: 0,
+    stockValueFormatted: "Rp 0",
+    stockTrend: 0,
+    lowStockCount: 0,
+    byCategory: [],
+    aging: [],
+  };
+  const purchasing = dashboardData?.purchasing ?? {
+    avgProcessingTime: 0,
+    processingTrend: 0,
+    approvalRate: 0,
+    approvalTrend: 0,
+    statusBreakdown: [],
+    aging: [],
+  };
+  const projects = dashboardData?.projects ?? [];
+  const alerts = dashboardData?.alerts ?? [];
+  const comparison = dashboardData?.comparison ?? [];
+  const lastUpdated = dashboardData?.lastUpdated ?? new Date();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

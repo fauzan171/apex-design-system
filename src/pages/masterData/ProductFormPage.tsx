@@ -26,13 +26,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { productService } from "@/services/masterDataService";
 import type {
   ProductCategory,
-  UnitOfMeasure,
   CreateProductRequest,
   UpdateProductRequest,
 } from "@/types/masterData";
 import {
   ProductCategory as ProductCategoryEnum,
-  UnitOfMeasure as UnitOfMeasureEnum,
+  UnitOfMeasure,
   productCategoryLabels,
   unitOfMeasureLabels,
 } from "@/types/masterData";
@@ -53,6 +52,7 @@ export function ProductFormPage() {
     description: "",
     category: "" as ProductCategory | "",
     unitOfMeasure: "" as UnitOfMeasure | "",
+    type: "FG" as "FG" | "SEMI" | "RAW" | "PACKAGING" | "SPAREPART" | "SUPPORT",
     basePrice: 0,
     sellingPrice: 0,
     costPrice: 0,
@@ -87,27 +87,28 @@ export function ProductFormPage() {
         setFormData({
           code: product.code,
           name: product.name,
-          description: product.description,
-          category: product.category,
-          unitOfMeasure: product.unitOfMeasure,
-          basePrice: product.basePrice,
-          sellingPrice: product.sellingPrice,
-          costPrice: product.costPrice,
-          minStock: product.minStock,
-          maxStock: product.maxStock,
-          reorderPoint: product.reorderPoint,
-          weight: product.weight || 0,
-          weightUnit: product.weightUnit || "kg",
-          length: product.dimensions?.length || 0,
-          width: product.dimensions?.width || 0,
-          height: product.dimensions?.height || 0,
-          dimensionUnit: product.dimensionUnit || "cm",
-          shelfLife: product.shelfLife || 0,
-          storageCondition: product.storageCondition || "",
-          barcode: product.barcode || "",
-          isPurchasable: product.isPurchasable,
-          isSellable: product.isSellable,
-          taxRate: product.taxRate,
+          description: product.description ?? "",
+          category: (product.category ?? "") as ProductCategory | "",
+          unitOfMeasure: (product.unitOfMeasure ?? "") as UnitOfMeasure | "",
+          type: (product.type ?? "FG") as "FG" | "SEMI" | "RAW" | "PACKAGING" | "SPAREPART" | "SUPPORT",
+          basePrice: product.basePrice ?? 0,
+          sellingPrice: product.sellingPrice ?? 0,
+          costPrice: product.costPrice ?? 0,
+          minStock: product.minStock ?? 0,
+          maxStock: product.maxStock ?? 0,
+          reorderPoint: product.reorderPoint ?? 0,
+          weight: product.weight ?? 0,
+          weightUnit: product.weightUnit ?? "kg",
+          length: product.dimensions?.length ?? 0,
+          width: product.dimensions?.width ?? 0,
+          height: product.dimensions?.height ?? 0,
+          dimensionUnit: product.dimensionUnit ?? "cm",
+          shelfLife: product.shelfLife ?? 0,
+          storageCondition: product.storageCondition ?? "",
+          barcode: product.barcode ?? "",
+          isPurchasable: product.isPurchasable ?? false,
+          isSellable: product.isSellable ?? true,
+          taxRate: product.taxRate ?? 11,
         });
       } else {
         navigate("/products");
@@ -204,6 +205,8 @@ export function ProductFormPage() {
         const createData: CreateProductRequest = {
           code: formData.code,
           name: formData.name,
+          type: formData.type,
+          baseUnit: formData.unitOfMeasure || "PCS",
           description: formData.description,
           category: formData.category as ProductCategory,
           unitOfMeasure: formData.unitOfMeasure as UnitOfMeasure,
@@ -360,7 +363,7 @@ export function ProductFormPage() {
                   <SelectValue placeholder="Select unit" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(UnitOfMeasureEnum).map(([_key, value]) => (
+                  {Object.values(UnitOfMeasure).map((value) => (
                     <SelectItem key={value} value={value}>
                       {unitOfMeasureLabels[value]}
                     </SelectItem>

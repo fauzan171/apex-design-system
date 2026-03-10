@@ -316,12 +316,12 @@ export function BoMListPage() {
                     <TableCell>
                       {bom.quantity} {bom.unitOfMeasure}
                     </TableCell>
-                    <TableCell>{bom.components.length} items</TableCell>
+                    <TableCell>{bom.components?.length ?? 0} items</TableCell>
                     <TableCell>
                       <div className="space-y-1">
-                        <p className="font-medium">{formatCurrency(bom.totalCost)}</p>
+                        <p className="font-medium">{formatCurrency(bom.totalCost ?? 0)}</p>
                         <p className="text-xs text-slate-500">
-                          Material: {formatCurrency(bom.totalMaterialCost)}
+                          Material: {formatCurrency(bom.totalMaterialCost ?? 0)}
                         </p>
                       </div>
                     </TableCell>
@@ -338,7 +338,7 @@ export function BoMListPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {new Date(bom.effectiveDate).toLocaleDateString()}
+                      {bom.effectiveDate ? new Date(bom.effectiveDate).toLocaleDateString() : "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>

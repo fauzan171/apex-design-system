@@ -1,143 +1,184 @@
 /**
  * Production Module Types
- * Based on PRD-06-PRODUCTION.md
+ * Based on PRD-06-PRODUCTION.md and OpenAPI spec
  */
 
 // ============================================
 // ENUMS
 // ============================================
 
+// Work Order Status (matches OpenAPI WorkOrder.status)
+export type WOStatusType =
+  | "draft"
+  | "not_started"
+  | "released"
+  | "in_progress"
+  | "marked_qc"
+  | "qc"
+  | "qc_in_progress"
+  | "qc_passed"
+  | "qc_failed"
+  | "completed"
+  | "cancelled";
+
 export enum WOStatus {
-  DRAFT = "Draft",
-  RELEASED = "Released",
-  IN_PROGRESS = "In Progress",
-  QC = "QC",
-  COMPLETED = "Completed",
-  CANCELLED = "Cancelled",
+  DRAFT = "draft",
+  NOT_STARTED = "not_started", // Legacy status
+  RELEASED = "released",
+  IN_PROGRESS = "in_progress",
+  MARKED_QC = "marked_qc",
+  QC = "qc", // Legacy status alias
+  QC_IN_PROGRESS = "qc_in_progress",
+  QC_PASSED = "qc_passed",
+  QC_FAILED = "qc_failed",
+  COMPLETED = "completed",
+  CANCELLED = "cancelled",
 }
+
+// WO Step Status (matches OpenAPI WOStep.status)
+export type WOStepStatusType = "pending" | "in_progress" | "completed";
 
 export enum WOStepStatus {
-  PENDING = "Pending",
-  IN_PROGRESS = "In Progress",
-  DONE = "Done",
+  PENDING = "pending",
+  IN_PROGRESS = "in_progress",
+  COMPLETED = "completed",
+  DONE = "completed", // Legacy alias
 }
+
+// QC Session Status
+export type QCSessionStatusType = "in_progress" | "completed";
+
+export enum QCSessionStatus {
+  IN_PROGRESS = "in_progress",
+  COMPLETED = "completed",
+}
+
+// QC Result (matches OpenAPI QCSession.result)
+export type QCResultType = "pass" | "fail" | "pending";
 
 export enum QCResult {
-  PASS = "Pass",
-  FAIL = "Fail",
+  PASS = "pass",
+  FAIL = "fail",
+  PENDING = "pending",
 }
 
+// QC Finding Status (matches OpenAPI QCFinding.status)
+export type QCFindingStatusType = "open" | "resolved";
+
 export enum QCFindingStatus {
-  OPEN = "Open",
-  RESOLVED = "Resolved",
+  OPEN = "open",
+  RESOLVED = "resolved",
+}
+
+// QC Finding Photo Type
+export type QCFindingPhotoType = "finding" | "rework";
+
+// ============================================
+// INTERFACES - Product Reference
+// ============================================
+
+/**
+ * Product reference (matches OpenAPI Product schema)
+ */
+export interface ProductReference {
+  id: string;
+  code: string;
+  name: string;
+  type: "FG" | "SEMI" | "RAW" | "PACKAGING" | "SPAREPART" | "SUPPORT";
+  description?: string;
+  baseUnit: string;
+  status: "active" | "inactive";
 }
 
 // ============================================
-// INTERFACES
+// INTERFACES - Work Order
 // ============================================
 
 /**
  * Work Order Step
+ * Matches OpenAPI WOStep schema
  */
 export interface WOStep {
   id: string;
   woId: string;
-  sequence: number;
-  operationName: string;
-  estimatedTime: number; // in minutes
-  status: WOStepStatus;
+  name?: string;
+  sequence?: number;
+  status?: WOStepStatusType;
+  startedAt?: string;
+  completedAt?: string;
+  // Legacy fields for backward compatibility
+  operationName?: string;
+  estimatedTime?: number;
   actualStart?: string;
   actualEnd?: string;
 }
 
 /**
  * Progress Photo
+ * Matches OpenAPI ProgressPhoto schema
  */
 export interface ProgressPhoto {
   id: string;
   progressId: string;
-  filePath: string;
+  url: string;
   caption?: string;
   uploadedAt: string;
-  uploadedBy: string;
-  uploadedByName: string;
 }
 
 /**
  * WO Progress Record
+ * Matches OpenAPI WOProgress schema
  */
 export interface WOProgress {
-  id: string;
-  woId: string;
-  stepId: string;
-  quantityDone: number;
+  id?: string;
+  woId?: string;
+  currentStepId?: string;
+  quantity?: number;
+  photos?: ProgressPhoto[];
+  createdAt?: string;
+  updatedAt?: string;
+  // Legacy fields
+  stepId?: string;
+  quantityDone?: number;
   notes?: string;
-  photos: ProgressPhoto[];
-  createdBy: string;
-  createdByName: string;
-  createdAt: string;
-}
-
-/**
- * QC Finding
- */
-export interface QCFinding {
-  id: string;
-  qcSessionId: string;
-  description: string;
-  reworkNotes: string;
-  status: QCFindingStatus;
-  photos: FindingPhoto[];
-  createdAt: string;
-  resolvedAt?: string;
-}
-
-/**
- * Finding Photo
- */
-export interface FindingPhoto {
-  id: string;
-  findingId: string;
-  filePath: string;
-  uploadedAt: string;
-}
-
-/**
- * QC Session
- */
-export interface QCSession {
-  id: string;
-  woId: string;
-  qcBy: string;
-  qcByName: string;
-  qcAt: string;
-  result: QCResult;
-  findings: QCFinding[];
+  createdBy?: string;
+  createdByName?: string;
 }
 
 /**
  * Work Order
+ * Matches OpenAPI WorkOrder schema
  */
 export interface WorkOrder {
   id: string;
-  woNumber: string;
-  planId: string;
-  planNumber: string;
-  productId: string;
-  productCode: string;
-  productName: string;
-  quantity: number;
-  status: WOStatus;
+  planId?: string;
+  productId?: string;
+  product?: ProductReference;
+  quantity?: number;
+  quantityCompleted?: number;
+  target_date?: string;
+  notes?: string;
+  status?: WOStatusType;
+  steps?: WOStep[];
+  progress?: WOProgress[];
+  createdAt?: string;
+  updatedAt?: string;
+  // Legacy fields for backward compatibility
+  woNumber?: string;
+  planNumber?: string;
+  planItemId?: string;
+  productCode?: string;
+  productName?: string;
+  unit?: string;
   startDate?: string;
-  targetDate: string; // required
   endDate?: string;
-  steps: WOStep[];
-  progress: WOProgress[];
-  qcSessions: QCSession[];
+  releaseDate?: string;
+  releaseBy?: string;
+  createdBy?: string;
+  targetDate?: string;
+  // QC fields
+  qcSessions?: QCSession[];
   reworkNotes?: string;
-  createdBy: string;
-  createdByName: string;
-  createdAt: string;
   releasedAt?: string;
   releasedBy?: string;
   completedAt?: string;
@@ -148,44 +189,118 @@ export interface WorkOrder {
 }
 
 // ============================================
+// INTERFACES - QC
+// ============================================
+
+/**
+ * QC Finding Photo
+ * Matches OpenAPI QCFindingPhoto schema
+ */
+export interface QCFindingPhoto {
+  id?: string;
+  findingId?: string;
+  url?: string;
+  filePath?: string; // Legacy field
+  type?: QCFindingPhotoType;
+  uploadedAt?: string;
+}
+
+/**
+ * QC Finding
+ * Matches OpenAPI QCFinding schema
+ */
+export interface QCFinding {
+  id?: string;
+  sessionId?: string;
+  description?: string;
+  reworkNotes?: string;
+  status?: QCFindingStatusType;
+  photos?: QCFindingPhoto[];
+  resolvedAt?: string;
+  createdAt?: string;
+  // Legacy field
+  qcSessionId?: string;
+}
+
+/**
+ * QC Session
+ * Matches OpenAPI QCSession schema
+ */
+export interface QCSession {
+  id?: string;
+  woId?: string;
+  workOrder?: WorkOrder;
+  status?: QCSessionStatusType;
+  result?: QCResultType;
+  notes?: string;
+  findings?: QCFinding[];
+  createdAt?: string;
+  updatedAt?: string;
+  // Legacy fields
+  qcBy?: string;
+  qcByName?: string;
+  qcAt?: string;
+}
+
+// ============================================
 // FORM TYPES
 // ============================================
 
+// Matches OpenAPI CreateWORequest
 export interface WOFormData {
-  planId: string;
-  planNumber: string;
-  productId: string;
-  productCode: string;
-  productName: string;
+  plan_id?: string;
+  product_id: string;
   quantity: number;
-  targetDate: string;
+  target_date: string;
   notes?: string;
-  steps: WOStepFormData[];
+  steps?: WOStepFormData[];
+  // Legacy fields
+  planId?: string;
+  planNumber?: string;
+  productId?: string;
+  productCode?: string;
+  productName?: string;
 }
 
 export interface WOStepFormData {
-  operationName: string;
-  estimatedTime: number;
+  name: string;
   sequence: number;
+  // Legacy fields
+  operationName?: string;
+  estimatedTime?: number;
+}
+
+// Matches OpenAPI UpdateWORequest
+export interface UpdateWORequest {
+  target_date?: string;
+  notes?: string;
+}
+
+// Matches OpenAPI CancelWORequest
+export interface CancelWORequest {
+  reason: string;
 }
 
 export interface ProgressUpdateFormData {
   stepId: string;
-  quantityDone: number;
+  quantity: number;
   notes?: string;
-  photos: File[];
+  photos?: File[];
   captions?: string[];
+  // Legacy field
+  quantityDone?: number;
 }
 
-export interface QCFormData {
-  result: QCResult;
-  findings: QCFindingFormData[];
-}
-
+// Matches OpenAPI AddFindingRequest
 export interface QCFindingFormData {
   description: string;
   reworkNotes: string;
   photos?: File[];
+}
+
+// Matches OpenAPI QCNotesRequest
+export interface QCNotesRequest {
+  notes?: string;
 }
 
 // ============================================
@@ -193,11 +308,15 @@ export interface QCFindingFormData {
 // ============================================
 
 export interface WOFilters {
-  status?: WOStatus | "all";
-  dateFrom?: string;
-  dateTo?: string;
+  status?: WOStatusType | "all";
+  startDate?: string;
+  endDate?: string;
   search?: string;
   productId?: string;
+  planId?: string;
+  // Legacy fields
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 // ============================================
@@ -205,7 +324,7 @@ export interface WOFilters {
 // ============================================
 
 export interface WOStatusSummary {
-  status: WOStatus;
+  status: WOStatusType;
   count: number;
 }
 
@@ -223,7 +342,7 @@ export interface ProductionMetrics {
 // ============================================
 
 export type WOStatusColor = {
-  [key in WOStatus]: {
+  [key in WOStatusType]: {
     bg: string;
     text: string;
     border: string;
@@ -231,40 +350,65 @@ export type WOStatusColor = {
 };
 
 export const woStatusColors: WOStatusColor = {
-  [WOStatus.DRAFT]: {
+  draft: {
     bg: "bg-slate-100",
     text: "text-slate-700",
     border: "border-slate-200",
   },
-  [WOStatus.RELEASED]: {
+  not_started: {
+    bg: "bg-slate-100",
+    text: "text-slate-600",
+    border: "border-slate-200",
+  },
+  released: {
     bg: "bg-blue-100",
     text: "text-blue-700",
     border: "border-blue-200",
   },
-  [WOStatus.IN_PROGRESS]: {
+  in_progress: {
     bg: "bg-amber-100",
     text: "text-amber-700",
     border: "border-amber-200",
   },
-  [WOStatus.QC]: {
+  marked_qc: {
     bg: "bg-purple-100",
     text: "text-purple-700",
     border: "border-purple-200",
   },
-  [WOStatus.COMPLETED]: {
+  qc: {
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    border: "border-purple-200",
+  },
+  qc_in_progress: {
+    bg: "bg-indigo-100",
+    text: "text-indigo-700",
+    border: "border-indigo-200",
+  },
+  qc_passed: {
     bg: "bg-green-100",
     text: "text-green-700",
     border: "border-green-200",
   },
-  [WOStatus.CANCELLED]: {
+  qc_failed: {
     bg: "bg-red-100",
     text: "text-red-700",
     border: "border-red-200",
   },
+  completed: {
+    bg: "bg-emerald-100",
+    text: "text-emerald-700",
+    border: "border-emerald-200",
+  },
+  cancelled: {
+    bg: "bg-slate-100",
+    text: "text-slate-500",
+    border: "border-slate-200",
+  },
 };
 
 export type WOStepStatusColor = {
-  [key in WOStepStatus]: {
+  [key in WOStepStatusType]: {
     bg: string;
     text: string;
     border: string;
@@ -272,17 +416,17 @@ export type WOStepStatusColor = {
 };
 
 export const woStepStatusColors: WOStepStatusColor = {
-  [WOStepStatus.PENDING]: {
+  pending: {
     bg: "bg-slate-100",
     text: "text-slate-600",
     border: "border-slate-200",
   },
-  [WOStepStatus.IN_PROGRESS]: {
+  in_progress: {
     bg: "bg-blue-100",
     text: "text-blue-700",
     border: "border-blue-200",
   },
-  [WOStepStatus.DONE]: {
+  completed: {
     bg: "bg-green-100",
     text: "text-green-700",
     border: "border-green-200",
@@ -290,31 +434,69 @@ export const woStepStatusColors: WOStepStatusColor = {
 };
 
 // Status transition rules
-export const canWOTransitionTo: Record<WOStatus, WOStatus[]> = {
-  [WOStatus.DRAFT]: [WOStatus.RELEASED, WOStatus.CANCELLED],
-  [WOStatus.RELEASED]: [WOStatus.IN_PROGRESS, WOStatus.CANCELLED],
-  [WOStatus.IN_PROGRESS]: [WOStatus.QC, WOStatus.CANCELLED],
-  [WOStatus.QC]: [WOStatus.COMPLETED, WOStatus.IN_PROGRESS], // Fail goes back to In Progress
-  [WOStatus.COMPLETED]: [], // Final state
-  [WOStatus.CANCELLED]: [], // Final state
+export const canWOTransitionTo: Record<WOStatusType, WOStatusType[]> = {
+  draft: ["released", "not_started", "cancelled"],
+  not_started: ["released", "cancelled"],
+  released: ["in_progress", "cancelled"],
+  in_progress: ["marked_qc", "qc", "cancelled"],
+  marked_qc: ["qc_in_progress", "cancelled"],
+  qc: ["qc_in_progress", "cancelled"],
+  qc_in_progress: ["qc_passed", "qc_failed"],
+  qc_passed: ["completed"],
+  qc_failed: ["in_progress"], // Rework - back to production
+  completed: [], // Final state
+  cancelled: [], // Final state
 };
 
 // Check if WO can be edited
-export const canWOEdit = (status: WOStatus): boolean => {
-  return status === WOStatus.DRAFT;
+export const canWOEdit = (status: WOStatusType): boolean => {
+  return status === "draft";
 };
 
 // Check if WO can be cancelled
-export const canWOCancel = (status: WOStatus): boolean => {
-  return status !== WOStatus.COMPLETED && status !== WOStatus.CANCELLED;
+export const canWOCancel = (status: WOStatusType): boolean => {
+  return status !== "completed" && status !== "cancelled";
 };
 
 // Check if WO is in a state where progress can be updated
-export const canUpdateProgress = (status: WOStatus): boolean => {
-  return status === WOStatus.IN_PROGRESS;
+export const canUpdateProgress = (status: WOStatusType): boolean => {
+  return status === "in_progress";
 };
 
 // Check if WO can be marked for QC
-export const canMarkForQC = (status: WOStatus): boolean => {
-  return status === WOStatus.IN_PROGRESS;
+export const canMarkForQC = (status: WOStatusType): boolean => {
+  return status === "in_progress";
+};
+
+// Check if WO is in QC
+export const isInQC = (status: WOStatusType): boolean => {
+  return ["marked_qc", "qc_in_progress", "qc_passed", "qc_failed"].includes(status);
+};
+
+// Check if WO can start QC
+export const canStartQC = (status: WOStatusType): boolean => {
+  return status === "marked_qc";
+};
+
+// Check if WO can be completed
+export const canComplete = (status: WOStatusType): boolean => {
+  return status === "qc_passed";
+};
+
+// Get display label for status
+export const getWOStatusLabel = (status: WOStatusType): string => {
+  const labels: Record<WOStatusType, string> = {
+    draft: "Draft",
+    not_started: "Not Started",
+    released: "Released",
+    in_progress: "In Progress",
+    marked_qc: "Marked for QC",
+    qc: "QC",
+    qc_in_progress: "QC In Progress",
+    qc_passed: "QC Passed",
+    qc_failed: "QC Failed",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  };
+  return labels[status] || status;
 };

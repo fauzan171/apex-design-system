@@ -35,7 +35,6 @@ import { productionService } from "@/services/productionService";
 import type { WorkOrder, WOStep } from "@/types/production";
 import {
   WOStatus,
-  WOStepStatus,
   woStatusColors,
   woStepStatusColors,
   QCResult,
@@ -113,21 +112,21 @@ export function WorkOrderDetailPage() {
 
   const getStepProgress = (stepId: string): number => {
     if (!wo) return 0;
-    const progress = wo.progress
+    const progress = (wo.progress ?? [])
       .filter((p) => p.stepId === stepId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-    return progress?.quantityDone || 0;
+      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())[0];
+    return progress?.quantityDone ?? 0;
   };
 
   const calculateOverallProgress = (): number => {
-    if (!wo || wo.steps.length === 0) return 0;
+    if (!wo || (wo.steps ?? []).length === 0) return 0;
 
-    const totalProgress = wo.steps.reduce((sum, step) => {
+    const totalProgress = (wo.steps ?? []).reduce((sum, step) => {
       const stepProgress = getStepProgress(step.id);
       return sum + stepProgress;
     }, 0);
 
-    return Math.round((totalProgress / (wo.quantity * wo.steps.length)) * 100);
+    return Math.round((totalProgress / ((wo.quantity ?? 0) * (wo.steps ?? []).length)) * 100);
   };
 
   const handleRelease = async () => {
@@ -160,7 +159,7 @@ export function WorkOrderDetailPage() {
     if (!wo) return;
     setActionLoading(true);
     try {
-      await productionService.cancelWO(wo.id, cancelReason);
+      await productionService.cancelWO(wo.id, { reason: cancelReason });
       setShowCancelDialog(false);
       await loadWO();
     } catch (error) {
@@ -187,8 +186,9 @@ export function WorkOrderDetailPage() {
     if (!wo || !selectedStep) return;
     setActionLoading(true);
     try {
-      await productionService.updateStepProgress(wo.id, selectedStep.id, {
-        quantityDone: progressData.quantityDone,
+      await productionService.updateProgress(wo.id, {
+        stepId: selectedStep.id,
+        quantity: progressData.quantityDone,
         notes: progressData.notes,
       });
       setShowProgressDialog(false);
@@ -205,16 +205,25 @@ export function WorkOrderDetailPage() {
     if (!wo) return;
     setActionLoading(true);
     try {
-      await productionService.submitQC(wo.id, {
-        result: qcResult,
-        findings:
-          qcResult === QCResult.FAIL
-            ? findings.map((f) => ({
-                description: f.description,
-                reworkNotes: f.reworkNotes,
-              }))
-            : [],
-      });
+      // Start or get active QC session
+      let session = await productionService.getActiveQCSession(wo.id);
+      if (!session) {
+        session = await productionService.startQC(wo.id);
+      }
+
+      // Add findings if QC failed
+      if (qcResult === QCResult.FAIL) {
+        for (const f of findings) {
+          await productionService.addQCFinding(session.id!, {
+            description: f.description,
+            reworkNotes: f.reworkNotes,
+          });
+        }
+      }
+
+      // Complete the QC session
+      await productionService.completeQC(session.id!, qcResult as "pass" | "fail");
+
       setShowQCDialog(false);
       setQCResult(QCResult.PASS);
       setFindings([]);
@@ -291,29 +300,29 @@ export function WorkOrderDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900">{wo.woNumber}</h1>
+              <h1 className="text-2xl font-bold text-slate-900">{wo.woNumber ?? "WO"}</h1>
               <Badge
                 variant="outline"
                 className={cn(
                   "gap-1.5",
-                  woStatusColors[wo.status].bg,
-                  woStatusColors[wo.status].text,
-                  woStatusColors[wo.status].border
+                  woStatusColors[wo.status ?? "draft"].bg,
+                  woStatusColors[wo.status ?? "draft"].text,
+                  woStatusColors[wo.status ?? "draft"].border
                 )}
               >
                 {wo.status === WOStatus.IN_PROGRESS && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 )}
-                {wo.status}
+                {wo.status ?? "draft"}
               </Badge>
             </div>
             <p className="text-sm text-slate-500 mt-1">
-              Plan: {wo.planNumber} | Product: {wo.productCode}
+              Plan: {wo.planNumber ?? "-"} | Product: {wo.productCode ?? "-"}
             </p>
           </div>
         </div>
         <div className="flex gap-2">
-          {canWOEdit(wo.status) && (
+          {canWOEdit(wo.status ?? "draft") && (
             <Button
               variant="outline"
               onClick={() => navigate(`/production/${wo.id}/edit`)}
@@ -322,31 +331,31 @@ export function WorkOrderDetailPage() {
               Edit
             </Button>
           )}
-          {wo.status === WOStatus.DRAFT && (
+          {(wo.status ?? "draft") === WOStatus.DRAFT && (
             <Button onClick={handleRelease} disabled={actionLoading}>
               <Play className="h-4 w-4 mr-2" />
               Release
             </Button>
           )}
-          {wo.status === WOStatus.RELEASED && (
+          {(wo.status ?? "draft") === WOStatus.RELEASED && (
             <Button onClick={handleStart} disabled={actionLoading}>
               <Play className="h-4 w-4 mr-2" />
               Start WO
             </Button>
           )}
-          {canMarkForQC(wo.status) && productionService.areAllStepsDone(wo.id) && (
+          {canMarkForQC(wo.status ?? "draft") && (wo.steps ?? []).every((s) => s.status === "completed") && (
             <Button onClick={handleMarkForQC} disabled={actionLoading}>
               <ClipboardCheck className="h-4 w-4 mr-2" />
               Mark for QC
             </Button>
           )}
-          {wo.status === WOStatus.QC && (
+          {(wo.status ?? "draft") === WOStatus.QC && (
             <Button onClick={() => setShowQCDialog(true)}>
               <ClipboardCheck className="h-4 w-4 mr-2" />
               QC Inspection
             </Button>
           )}
-          {canWOCancel(wo.status) && (
+          {canWOCancel(wo.status ?? "draft") && (
             <Button
               variant="destructive"
               onClick={() => setShowCancelDialog(true)}
@@ -365,8 +374,8 @@ export function WorkOrderDetailPage() {
             <div>
               <h3 className="font-semibold text-slate-900">Overall Progress</h3>
               <p className="text-sm text-slate-500">
-                {wo.steps.filter((s) => s.status === WOStepStatus.DONE).length} of{" "}
-                {wo.steps.length} steps completed
+                {(wo.steps ?? []).filter((s) => s.status === "completed").length} of{" "}
+                {(wo.steps ?? []).length} steps completed
               </p>
             </div>
             <div className="text-2xl font-bold text-slate-900">{overallProgress}%</div>
@@ -384,23 +393,23 @@ export function WorkOrderDetailPage() {
               <CardTitle className="text-lg">Production Steps</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {wo.steps.length === 0 ? (
+              {(wo.steps ?? []).length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
                   <p>No steps defined</p>
                 </div>
               ) : (
-                wo.steps
-                  .sort((a, b) => a.sequence - b.sequence)
+                (wo.steps ?? [])
+                  .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
                   .map((step, index) => {
                     const stepProgress = getStepProgress(step.id);
-                    const progressPercent = Math.round((stepProgress / wo.quantity) * 100);
+                    const progressPercent = Math.round((stepProgress / (wo.quantity ?? 1)) * 100);
 
                     return (
                       <div
                         key={step.id}
                         className={cn(
                           "border rounded-lg p-4",
-                          step.status === WOStepStatus.IN_PROGRESS && "border-blue-200 bg-blue-50/50"
+                          step.status === "in_progress" && "border-blue-200 bg-blue-50/50"
                         )}
                       >
                         <div className="flex items-start justify-between mb-3">
@@ -408,14 +417,14 @@ export function WorkOrderDetailPage() {
                             <div
                               className={cn(
                                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
-                                step.status === WOStepStatus.DONE
+                                step.status === "completed"
                                   ? "bg-green-100 text-green-700"
-                                  : step.status === WOStepStatus.IN_PROGRESS
+                                  : step.status === "in_progress"
                                   ? "bg-blue-100 text-blue-700"
                                   : "bg-slate-100 text-slate-600"
                               )}
                             >
-                              {step.status === WOStepStatus.DONE ? (
+                              {step.status === "completed" ? (
                                 <CheckCircle2 className="h-4 w-4" />
                               ) : (
                                 index + 1
@@ -423,22 +432,22 @@ export function WorkOrderDetailPage() {
                             </div>
                             <div>
                               <h4 className="font-medium text-slate-900">
-                                {step.operationName}
+                                {step.operationName ?? step.name ?? "Step"}
                               </h4>
                               <p className="text-xs text-slate-500">
-                                Est. time: {step.estimatedTime} min
+                                Est. time: {step.estimatedTime ?? 0} min
                               </p>
                             </div>
                           </div>
                           <Badge
                             variant="outline"
                             className={cn(
-                              woStepStatusColors[step.status].bg,
-                              woStepStatusColors[step.status].text,
-                              woStepStatusColors[step.status].border
+                              woStepStatusColors[step.status ?? "pending"].bg,
+                              woStepStatusColors[step.status ?? "pending"].text,
+                              woStepStatusColors[step.status ?? "pending"].border
                             )}
                           >
-                            {step.status}
+                            {step.status ?? "pending"}
                           </Badge>
                         </div>
 
@@ -446,13 +455,13 @@ export function WorkOrderDetailPage() {
                           <div className="flex justify-between text-sm">
                             <span className="text-slate-600">Progress</span>
                             <span className="font-medium">
-                              {stepProgress} / {wo.quantity} ({progressPercent}%)
+                              {stepProgress} / {wo.quantity ?? 0} ({progressPercent}%)
                             </span>
                           </div>
                           <Progress value={progressPercent} className="h-2" />
                         </div>
 
-                        {canUpdateProgress(wo.status) && step.status !== WOStepStatus.DONE && (
+                        {canUpdateProgress(wo.status ?? "draft") && step.status !== "completed" && (
                           <div className="mt-3 pt-3 border-t">
                             <Button
                               size="sm"
@@ -481,19 +490,19 @@ export function WorkOrderDetailPage() {
           </Card>
 
           {/* QC History */}
-          {wo.qcSessions.length > 0 && (
+          {(wo.qcSessions ?? []).length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">QC History</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {wo.qcSessions.map((session, index) => (
-                  <div key={session.id} className="border rounded-lg p-4">
+                {(wo.qcSessions ?? []).map((session, index) => (
+                  <div key={session.id ?? index} className="border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">QC #{index + 1}</span>
                         <span className="text-sm text-slate-500">
-                          by {session.qcByName}
+                          by {session.qcByName ?? "Unknown"}
                         </span>
                       </div>
                       <Badge
@@ -504,25 +513,25 @@ export function WorkOrderDetailPage() {
                         ) : (
                           <XCircle className="h-3.5 w-3.5 mr-1" />
                         )}
-                        {session.result}
+                        {session.result ?? "pending"}
                       </Badge>
                     </div>
                     <p className="text-sm text-slate-500 mb-3">
                       {formatDateTime(session.qcAt)}
                     </p>
-                    {session.findings.length > 0 && (
+                    {(session.findings ?? []).length > 0 && (
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-slate-700">Findings:</p>
-                        {session.findings.map((finding) => (
+                        {(session.findings ?? []).map((finding, findingIndex) => (
                           <div
-                            key={finding.id}
+                            key={finding.id ?? findingIndex}
                             className="bg-amber-50 border border-amber-200 rounded p-3 text-sm"
                           >
                             <p className="font-medium text-amber-900">
-                              {finding.description}
+                              {finding.description ?? "No description"}
                             </p>
                             <p className="text-amber-700 mt-1">
-                              Rework: {finding.reworkNotes}
+                              Rework: {finding.reworkNotes ?? "N/A"}
                             </p>
                           </div>
                         ))}
@@ -545,12 +554,12 @@ export function WorkOrderDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-slate-500">Product</p>
-                  <p className="font-medium text-slate-900">{wo.productName}</p>
-                  <p className="text-xs text-slate-500">{wo.productCode}</p>
+                  <p className="font-medium text-slate-900">{wo.productName ?? "-"}</p>
+                  <p className="text-xs text-slate-500">{wo.productCode ?? "-"}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Quantity</p>
-                  <p className="font-medium text-slate-900">{wo.quantity} units</p>
+                  <p className="font-medium text-slate-900">{wo.quantity ?? 0} units</p>
                 </div>
               </div>
               <Separator />
@@ -591,7 +600,7 @@ export function WorkOrderDetailPage() {
               <div className="space-y-2">
                 <p className="text-sm text-slate-500">Created</p>
                 <p className="text-sm text-slate-900">
-                  {formatDateTime(wo.createdAt)} by {wo.createdByName}
+                  {formatDateTime(wo.createdAt)} by {wo.createdBy ?? "Unknown"}
                 </p>
               </div>
               {wo.releasedAt && (
@@ -641,30 +650,30 @@ export function WorkOrderDetailPage() {
             <CardContent className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Total Steps</span>
-                <span className="font-medium">{wo.steps.length}</span>
+                <span className="font-medium">{(wo.steps ?? []).length}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Completed</span>
                 <span className="font-medium text-green-600">
-                  {wo.steps.filter((s) => s.status === WOStepStatus.DONE).length}
+                  {(wo.steps ?? []).filter((s) => s.status === "completed").length}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">In Progress</span>
                 <span className="font-medium text-blue-600">
-                  {wo.steps.filter((s) => s.status === WOStepStatus.IN_PROGRESS).length}
+                  {(wo.steps ?? []).filter((s) => s.status === "in_progress").length}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Pending</span>
                 <span className="font-medium text-slate-500">
-                  {wo.steps.filter((s) => s.status === WOStepStatus.PENDING).length}
+                  {(wo.steps ?? []).filter((s) => s.status === "pending").length}
                 </span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Progress Records</span>
-                <span className="font-medium">{wo.progress.length}</span>
+                <span className="font-medium">{(wo.progress ?? []).length}</span>
               </div>
             </CardContent>
           </Card>
@@ -715,20 +724,20 @@ export function WorkOrderDetailPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="quantity">
-                Quantity Done (max: {wo.quantity})
+                Quantity Done (max: {wo.quantity ?? 0})
               </Label>
               <Input
                 id="quantity"
                 type="number"
                 min={0}
-                max={wo.quantity}
+                max={wo.quantity ?? 0}
                 value={progressData.quantityDone}
                 onChange={(e) =>
                   setProgressData({
                     ...progressData,
                     quantityDone: Math.min(
                       parseInt(e.target.value) || 0,
-                      wo.quantity
+                      wo.quantity ?? 0
                     ),
                   })
                 }

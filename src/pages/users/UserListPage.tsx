@@ -351,7 +351,7 @@ export function UserListPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {user.roles.map((role) => (
+                        {(user.roles ?? []).map((role) => (
                           <Badge key={role.id} variant="secondary" className="text-xs">
                             {role.name}
                           </Badge>

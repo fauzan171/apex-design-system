@@ -87,22 +87,22 @@ export function WorkOrderFormPage() {
         }
 
         setFormData({
-          planId: wo.planId,
-          planNumber: wo.planNumber,
-          productId: wo.productId,
-          productCode: wo.productCode,
-          productName: wo.productName,
-          quantity: wo.quantity,
-          targetDate: wo.targetDate,
-          notes: "",
+          planId: wo.planId ?? "",
+          planNumber: wo.planNumber ?? "",
+          productId: wo.productId ?? "",
+          productCode: wo.productCode ?? "",
+          productName: wo.productName ?? "",
+          quantity: wo.quantity ?? 0,
+          targetDate: wo.targetDate ?? wo.target_date ?? "",
+          notes: wo.notes ?? "",
         });
 
         setSteps(
-          wo.steps.map((step) => ({
+          (wo.steps ?? []).map((step) => ({
             id: step.id,
-            operationName: step.operationName,
-            estimatedTime: step.estimatedTime,
-            sequence: step.sequence,
+            operationName: step.operationName ?? step.name ?? "",
+            estimatedTime: step.estimatedTime ?? 0,
+            sequence: step.sequence ?? 0,
           }))
         );
       }
@@ -134,18 +134,18 @@ export function WorkOrderFormPage() {
 
   const selectPlan = (plan: ProductionPlan) => {
     // Get the first item from the plan
-    const firstItem = plan.items[0];
+    const firstItem = (plan.items ?? [])[0];
     if (!firstItem) return;
 
     setFormData({
       ...formData,
       planId: plan.id,
-      planNumber: plan.planNumber,
-      productId: firstItem.productId,
-      productCode: firstItem.productCode,
-      productName: firstItem.productName,
-      quantity: firstItem.quantity,
-      targetDate: plan.targetCompletionDate,
+      planNumber: plan.planNumber ?? "",
+      productId: firstItem.productId ?? "",
+      productCode: firstItem.productCode ?? "",
+      productName: firstItem.productName ?? "",
+      quantity: firstItem.quantity ?? 0,
+      targetDate: plan.targetCompletionDate ?? plan.target_completion_date ?? "",
     });
     setShowPlanDialog(false);
     setErrors((prev) => ({ ...prev, planId: "" }));
@@ -228,26 +228,21 @@ export function WorkOrderFormPage() {
     setSaving(true);
     try {
       const stepData: WOStepFormData[] = steps.map((step) => ({
-        operationName: step.operationName,
-        estimatedTime: step.estimatedTime,
+        name: step.operationName,
         sequence: step.sequence,
       }));
 
       if (isEdit && id) {
         await productionService.updateWO(id, {
-          targetDate: formData.targetDate,
+          target_date: formData.targetDate,
           notes: formData.notes,
-          steps: stepData,
         });
       } else {
         await productionService.createWO({
-          planId: formData.planId,
-          planNumber: formData.planNumber,
-          productId: formData.productId,
-          productCode: formData.productCode,
-          productName: formData.productName,
+          plan_id: formData.planId,
+          product_id: formData.productId,
           quantity: formData.quantity,
-          targetDate: formData.targetDate,
+          target_date: formData.targetDate,
           notes: formData.notes,
           steps: stepData,
         });
@@ -566,26 +561,26 @@ export function WorkOrderFormPage() {
                 </TableHeader>
                 <TableBody>
                   {plans.map((plan) => {
-                    const firstItem = plan.items[0];
+                    const firstItem = (plan.items ?? [])[0];
                     return (
                       <TableRow key={plan.id}>
                         <TableCell className="font-medium">
-                          {plan.planNumber}
+                          {plan.planNumber ?? "-"}
                         </TableCell>
                         <TableCell>
                           {firstItem ? (
                             <>
-                              <div className="font-medium">{firstItem.productName}</div>
+                              <div className="font-medium">{firstItem.productName ?? "-"}</div>
                               <div className="text-xs text-slate-500">
-                                {firstItem.productCode}
+                                {firstItem.productCode ?? "-"}
                               </div>
                             </>
                           ) : (
                             <span className="text-slate-400">No items</span>
                           )}
                         </TableCell>
-                        <TableCell>{firstItem?.quantity || 0}</TableCell>
-                        <TableCell>{formatDate(plan.targetCompletionDate)}</TableCell>
+                        <TableCell>{firstItem?.quantity ?? 0}</TableCell>
+                        <TableCell>{formatDate(plan.targetCompletionDate ?? plan.target_completion_date ?? "")}</TableCell>
                         <TableCell>
                           <Button size="sm" onClick={() => selectPlan(plan)}>
                             Select

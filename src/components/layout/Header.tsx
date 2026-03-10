@@ -1,7 +1,23 @@
-import { Bell, Search, User } from "lucide-react";
+import { Bell, Search, User, ChevronDown, LogOut, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export function Header() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+  };
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30">
       <div className="flex items-center gap-4">
@@ -23,15 +39,53 @@ export function Header() {
 
         <div className="h-8 w-px bg-slate-200" />
 
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-sm font-medium text-slate-800">John Doe</p>
-            <p className="text-xs text-slate-500">Production Manager</p>
-          </div>
-          <div className="w-9 h-9 bg-[#006600] rounded-full flex items-center justify-center">
-            <User className="h-5 w-5 text-white" />
-          </div>
-        </div>
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 hover:bg-slate-50 rounded-lg p-1.5 transition-colors">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-slate-800">
+                    {user.fullName}
+                  </p>
+                  <p className="text-xs text-slate-500">{user.role}</p>
+                </div>
+                <div className="w-9 h-9 bg-[#006600] rounded-full flex items-center justify-center">
+                  <span className="text-sm font-medium text-white">
+                    {user.fullName
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .toUpperCase()}
+                  </span>
+                </div>
+                <ChevronDown className="h-4 w-4 text-slate-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="px-2 py-1.5">
+                <p className="text-sm font-medium">{user.fullName}</p>
+                <p className="text-xs text-slate-500">{user.email}</p>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate("/change-password")}>
+                <Key className="h-4 w-4 mr-2" />
+                Change Password
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/settings")}>
+                <User className="h-4 w-4 mr-2" />
+                Profile Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-red-600 focus:text-red-600"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </header>
   );

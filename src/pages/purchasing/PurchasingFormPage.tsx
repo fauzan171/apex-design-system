@@ -55,10 +55,10 @@ export function PurchasingFormPage() {
       const data = await purchasingService.getPRById(id);
       if (data) {
         setPR(data);
-        setRequestDate(data.requestDate);
-        setRequiredDate(data.requiredDate);
+        setRequestDate(data.requestDate ?? data.createdAt ?? "");
+        setRequiredDate(data.requiredDate ?? data.required_date ?? "");
         setNotes(data.notes || "");
-        setItems(data.items);
+        setItems(data.items ?? []);
       }
     } catch (error) {
       console.error("Failed to load PR:", error);
@@ -83,7 +83,7 @@ export function PurchasingFormPage() {
     }
 
     items.forEach((item, index) => {
-      if (item.quantity <= 0) {
+      if ((item.quantityRequested ?? 0) <= 0) {
         newErrors[`item-${index}`] = "Quantity must be greater than 0";
       }
     });
@@ -99,31 +99,24 @@ export function PurchasingFormPage() {
     try {
       if (isNew) {
         const newPR = await purchasingService.createPR({
-          requestDate,
-          requiredDate,
+          required_date: requiredDate,
+          priority: "medium",
           notes,
           items: items.map((item) => ({
             materialId: item.materialId,
-            materialCode: item.materialCode,
-            materialName: item.materialName,
-            quantity: item.quantity,
-            unit: item.unit,
+            quantityRequested: item.quantityRequested ?? 0,
             notes: item.notes,
           })),
         });
         navigate(`/purchasing/${newPR.id}`);
       } else if (pr) {
         await purchasingService.updatePR(pr.id, {
-          requestDate,
-          requiredDate,
+          required_date: requiredDate,
           notes,
           items: items.map((item) => ({
             id: item.id,
             materialId: item.materialId,
-            materialCode: item.materialCode,
-            materialName: item.materialName,
-            quantity: item.quantity,
-            unit: item.unit,
+            quantityRequested: item.quantityRequested ?? 0,
             notes: item.notes,
           })),
         });
@@ -138,7 +131,7 @@ export function PurchasingFormPage() {
 
   const handleQuantityChange = (index: number, quantity: number) => {
     const newItems = [...items];
-    newItems[index].quantity = quantity;
+    newItems[index].quantityRequested = quantity;
     setItems(newItems);
   };
 
@@ -263,7 +256,7 @@ export function PurchasingFormPage() {
                           <Input
                             type="number"
                             min={1}
-                            value={item.quantity}
+                            value={item.quantityRequested ?? 0}
                             onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 0)}
                             className={cn(
                               "w-24 text-center mx-auto",
@@ -323,7 +316,7 @@ export function PurchasingFormPage() {
               <div className="flex justify-between">
                 <span className="text-slate-600">Total Quantity</span>
                 <span className="font-medium">
-                  {items.reduce((sum, item) => sum + item.quantity, 0).toLocaleString()} units
+                  {items.reduce((sum, item) => sum + (item.quantityRequested ?? 0), 0).toLocaleString()} units
                 </span>
               </div>
 

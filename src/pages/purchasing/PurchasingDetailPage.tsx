@@ -104,7 +104,7 @@ export function PurchasingDetailPage() {
     if (!pr) return;
     setActionLoading(true);
     try {
-      await purchasingService.approvePR(pr.id, approveNotes);
+      await purchasingService.approvePR(pr.id, { notes: approveNotes });
       setShowApproveDialog(false);
       setApproveNotes("");
       loadPR();
@@ -119,7 +119,7 @@ export function PurchasingDetailPage() {
     if (!pr || !rejectReason.trim()) return;
     setActionLoading(true);
     try {
-      await purchasingService.rejectPR(pr.id, rejectReason);
+      await purchasingService.rejectPR(pr.id, { reason: rejectReason });
       setShowRejectDialog(false);
       setRejectReason("");
       loadPR();
@@ -163,7 +163,7 @@ export function PurchasingDetailPage() {
     if (!pr || !leadTimeDate) return;
     setActionLoading(true);
     try {
-      await purchasingService.updateLeadTime(pr.id, leadTimeDate);
+      await purchasingService.updateLeadTime(pr.id, { lead_time_estimate: parseInt(leadTimeDate) });
       setShowLeadTimeDialog(false);
       setLeadTimeDate("");
       loadPR();
@@ -205,7 +205,7 @@ export function PurchasingDetailPage() {
     setDODate("");
     setDONotes("");
     setDODocument(null);
-    setDOItems(pr.items.map((item) => ({ prItemId: item.id, quantity: item.quantity - item.receivedQty })));
+    setDOItems((pr.items ?? []).map((item) => ({ prItemId: item.id, quantity: (item.quantityRequested ?? 0) - (item.receivedQty ?? 0) })));
     setShowDODialog(true);
   };
 
@@ -241,7 +241,7 @@ export function PurchasingDetailPage() {
         return <TrendingUp className="h-4 w-4" />;
       case PRStatus.DO_ISSUED:
         return <Truck className="h-4 w-4" />;
-      case PRStatus.CLOSED:
+      case PRStatus.CANCELLED:
         return <Package className="h-4 w-4" />;
       default:
         return null;
@@ -288,12 +288,12 @@ export function PurchasingDetailPage() {
                   prStatusColors[pr.status].border
                 )}
               >
-                {getStatusIcon(pr.status)}
+                {getStatusIcon(pr.status as PRStatus)}
                 {pr.status}
               </Badge>
             </div>
             <p className="text-sm text-slate-500 mt-1">
-              {pr.items.length} item{pr.items.length > 1 ? "s" : ""} • Created by {pr.createdByName}
+              {(pr.items ?? []).length} item{(pr.items ?? []).length > 1 ? "s" : ""} • Created by {pr.createdByName}
             </p>
           </div>
         </div>
@@ -378,7 +378,7 @@ export function PurchasingDetailPage() {
           {(pr.status === PRStatus.APPROVED || pr.status === PRStatus.PROCESSING) && (
             <Button variant="outline" onClick={() => setShowLeadTimeDialog(true)}>
               <Calendar className="h-4 w-4 mr-2" />
-              {pr.leadTimeEstimate ? "Update Lead Time" : "Set Lead Time"}
+              {pr.lead_time_estimate ? "Update Lead Time" : "Set Lead Time"}
             </Button>
           )}
 
@@ -419,7 +419,7 @@ export function PurchasingDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Request Date</p>
-                <p className="font-medium text-slate-900">{formatDate(pr.requestDate)}</p>
+                <p className="font-medium text-slate-900">{formatDate(pr.requestDate ?? pr.createdAt ?? "")}</p>
               </div>
             </div>
           </CardContent>
@@ -432,7 +432,7 @@ export function PurchasingDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Required Date</p>
-                <p className="font-medium text-slate-900">{formatDate(pr.requiredDate)}</p>
+                <p className="font-medium text-slate-900">{formatDate(pr.requiredDate ?? pr.required_date ?? "")}</p>
               </div>
             </div>
           </CardContent>
@@ -445,7 +445,7 @@ export function PurchasingDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Total Items</p>
-                <p className="font-medium text-slate-900">{pr.items.length} items</p>
+                <p className="font-medium text-slate-900">{(pr.items ?? []).length} items</p>
               </div>
             </div>
           </CardContent>
@@ -459,7 +459,7 @@ export function PurchasingDetailPage() {
               <div>
                 <p className="text-sm text-slate-500">Lead Time Est.</p>
                 <p className="font-medium text-slate-900">
-                  {pr.leadTimeEstimate ? formatDate(pr.leadTimeEstimate) : "-"}
+                  {pr.lead_time_estimate ? formatDate(String(pr.lead_time_estimate)) : "-"}
                 </p>
               </div>
             </div>
@@ -531,7 +531,7 @@ export function PurchasingDetailPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pr.items.map((item) => (
+              {pr.items && pr.items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
                     <div>
@@ -539,14 +539,14 @@ export function PurchasingDetailPage() {
                       <p className="text-xs text-slate-500">{item.materialName}</p>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">{item.quantity.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{(item.quantityRequested ?? 0).toLocaleString()}</TableCell>
                   <TableCell>{item.unit}</TableCell>
                   <TableCell className="text-right">
                     <span className={cn(
-                      item.receivedQty === item.quantity ? "text-green-600" :
-                      item.receivedQty > 0 ? "text-amber-600" : "text-slate-600"
+                      item.receivedQty === item.quantityRequested ? "text-green-600" :
+                      (item.receivedQty ?? 0) > 0 ? "text-amber-600" : "text-slate-600"
                     )}>
-                      {item.receivedQty.toLocaleString()}
+                      {(item.receivedQty ?? 0).toLocaleString()}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -570,21 +570,21 @@ export function PurchasingDetailPage() {
       </Card>
 
       {/* Delivery Orders */}
-      {pr.deliveryOrders.length > 0 && (
+      {(pr.deliveryOrders ?? []).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Truck className="h-5 w-5" />
-              Delivery Orders ({pr.deliveryOrders.length})
+              Delivery Orders ({(pr.deliveryOrders ?? []).length})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {pr.deliveryOrders.map((do_) => (
+            {(pr.deliveryOrders ?? []).map((do_) => (
               <div key={do_.id} className="border rounded-lg p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <p className="font-medium text-slate-900">{do_.doNumber}</p>
-                    <p className="text-sm text-slate-500">{formatDate(do_.doDate)}</p>
+                    <p className="font-medium text-slate-900">{do_.do_number || do_.doNumber}</p>
+                    <p className="text-sm text-slate-500">{formatDate(do_.do_date || do_.doDate || "")}</p>
                   </div>
                   {do_.documentPath && (
                     <Button variant="outline" size="sm" className="gap-2">
@@ -604,15 +604,15 @@ export function PurchasingDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {do_.items.map((item) => (
+                    {(do_.items ?? []).map((item) => (
                       <TableRow key={item.id}>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{item.materialCode}</p>
-                            <p className="text-xs text-slate-500">{item.materialName}</p>
+                            <p className="font-medium">{item.material?.code ?? item.materialId}</p>
+                            <p className="text-xs text-slate-500">{item.material?.name ?? "-"}</p>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">{item.quantity.toLocaleString()} {item.unit}</TableCell>
+                        <TableCell className="text-right">{(item.quantity ?? 0).toLocaleString()} {item.unit}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -624,44 +624,38 @@ export function PurchasingDetailPage() {
       )}
 
       {/* Status History */}
-      {pr.statusLogs.length > 0 && (
+      {(pr.approvalHistory ?? []).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Status History</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {pr.statusLogs.map((log, index) => (
+              {(pr.approvalHistory ?? []).map((log: { id: string; action: string; notes?: string; createdAt?: string; approver?: { fullName: string } }, index: number) => (
                 <div key={log.id} className="flex items-start gap-3 text-sm">
                   <div className="flex flex-col items-center">
                     <div
                       className={cn(
                         "w-2 h-2 rounded-full",
-                        log.newStatus === PRStatus.REJECTED
+                        log.action === "reject"
                           ? "bg-red-500"
-                          : log.newStatus === PRStatus.APPROVED ||
-                            log.newStatus === PRStatus.CLOSED
+                          : log.action === "approve"
                           ? "bg-green-500"
                           : "bg-blue-500"
                       )}
                     />
-                    {index < pr.statusLogs.length - 1 && (
+                    {index < (pr.approvalHistory ?? []).length - 1 && (
                       <div className="w-px h-6 bg-slate-200" />
                     )}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-900">{log.newStatus}</span>
-                      {log.oldStatus && (
-                        <span className="text-slate-400 text-xs">
-                          (from {log.oldStatus})
-                        </span>
-                      )}
+                      <span className="font-medium text-slate-900">{log.action}</span>
                       <span className="text-slate-400">by</span>
-                      <span className="text-slate-700">{log.changedByName}</span>
+                      <span className="text-slate-700">{log.approver?.fullName ?? "System"}</span>
                     </div>
                     <p className="text-slate-500 text-xs mt-0.5">
-                      {formatDateTime(log.changedAt)}
+                      {formatDateTime(log.createdAt ?? "")}
                     </p>
                     {log.notes && (
                       <p className="text-slate-600 mt-1 italic">"{log.notes}"</p>
@@ -802,7 +796,7 @@ export function PurchasingDetailPage() {
               <Label>Estimated Delivery Date</Label>
               <Input
                 type="date"
-                value={leadTimeDate || pr.leadTimeEstimate || ""}
+                value={leadTimeDate || (pr.lead_time_estimate ? String(pr.lead_time_estimate) : "")}
                 onChange={(e) => setLeadTimeDate(e.target.value)}
               />
             </div>
@@ -880,15 +874,15 @@ export function PurchasingDetailPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pr.items.map((item) => {
-                    const pending = item.quantity - item.receivedQty;
+                  {(pr.items ?? []).map((item) => {
+                    const pending = (item.quantityRequested ?? 0) - (item.receivedQty ?? 0);
                     const doItem = doItems.find((d) => d.prItemId === item.id);
                     return (
                       <TableRow key={item.id}>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{item.materialCode}</p>
-                            <p className="text-xs text-slate-500">{item.materialName}</p>
+                            <p className="font-medium">{item.material?.code ?? item.materialId}</p>
+                            <p className="text-xs text-slate-500">{item.material?.name ?? "-"}</p>
                           </div>
                         </TableCell>
                         <TableCell className="text-right">{pending.toLocaleString()}</TableCell>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -13,6 +13,7 @@ import {
   AlertCircle,
   ClipboardCheck,
   PlayCircle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,12 +35,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { productionService } from "@/services/productionService";
-import type { WorkOrder, WOStatusSummary, ProductionMetrics } from "@/types/production";
-import {
-  WOStatus,
-  woStatusColors,
-} from "@/types/production";
+import { useProductionOrders, useWOStatusSummary, useProductionMetrics } from "@/hooks";
+import type { WorkOrder, WOStatusType } from "@/types/production";
+import { WOStatus, woStatusColors } from "@/types/production";
 import { cn } from "@/lib/utils";
 
 const statusOptions = [
@@ -52,59 +50,71 @@ const statusOptions = [
   { value: WOStatus.CANCELLED, label: "Cancelled" },
 ];
 
+// Status icons mapping
+const statusIcons: Partial<Record<WOStatus, React.ReactNode>> = {
+  [WOStatus.DRAFT]: <Clock className="h-3.5 w-3.5" />,
+  [WOStatus.NOT_STARTED]: <Clock className="h-3.5 w-3.5" />,
+  [WOStatus.RELEASED]: <PlayCircle className="h-3.5 w-3.5" />,
+  [WOStatus.IN_PROGRESS]: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
+  [WOStatus.MARKED_QC]: <ClipboardCheck className="h-3.5 w-3.5" />,
+  [WOStatus.QC]: <ClipboardCheck className="h-3.5 w-3.5" />,
+  [WOStatus.QC_IN_PROGRESS]: <ClipboardCheck className="h-3.5 w-3.5" />,
+  [WOStatus.QC_PASSED]: <CheckCircle2 className="h-3.5 w-3.5" />,
+  [WOStatus.QC_FAILED]: <XCircle className="h-3.5 w-3.5" />,
+  [WOStatus.COMPLETED]: <CheckCircle2 className="h-3.5 w-3.5" />,
+  [WOStatus.CANCELLED]: <XCircle className="h-3.5 w-3.5" />,
+};
+
 export function WorkOrderListPage() {
   const navigate = useNavigate();
-  const [wos, setWOs] = useState<WorkOrder[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [statusSummary, setStatusSummary] = useState<WOStatusSummary[]>([]);
-  const [metrics, setMetrics] = useState<ProductionMetrics | null>(null);
 
-  useEffect(() => {
-    loadData();
+  // Build filters for hooks
+  const filters = useMemo(() => {
+    if (statusFilter === "all" && !search) return undefined;
+    return {
+      status: statusFilter !== "all" ? statusFilter as WOStatusType : undefined,
+      search: search || undefined,
+    };
   }, [statusFilter, search]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [woData, summaryData, metricsData] = await Promise.all([
-        productionService.getWOs({
-          status: statusFilter,
-          search,
-        }),
-        productionService.getWOStatusSummary(),
-        productionService.getProductionMetrics(),
-      ]);
-      setWOs(woData);
-      setStatusSummary(summaryData);
-      setMetrics(metricsData);
-    } catch (error) {
-      console.error("Failed to load data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Use custom hooks for data fetching
+  const {
+    data: wos = [],
+    isLoading: loading,
+    isFetching,
+    refetch: refetchWOs,
+  } = useProductionOrders({
+    filters,
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
 
-  const getStatusIcon = (status: WOStatus) => {
-    switch (status) {
-      case WOStatus.DRAFT:
-        return <Clock className="h-3.5 w-3.5" />;
-      case WOStatus.RELEASED:
-        return <PlayCircle className="h-3.5 w-3.5" />;
-      case WOStatus.IN_PROGRESS:
-        return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
-      case WOStatus.QC:
-        return <ClipboardCheck className="h-3.5 w-3.5" />;
-      case WOStatus.COMPLETED:
-        return <CheckCircle2 className="h-3.5 w-3.5" />;
-      case WOStatus.CANCELLED:
-        return <XCircle className="h-3.5 w-3.5" />;
-      default:
-        return null;
-    }
-  };
+  const {
+    data: statusSummaryData,
+    refetch: refetchSummary,
+  } = useWOStatusSummary({ refetchInterval: 60000 });
 
+  const {
+    data: metrics,
+    refetch: refetchMetrics,
+  } = useProductionMetrics();
+
+  // Use status summary array directly
+  const statusSummary = useMemo(() => {
+    if (!statusSummaryData) return [];
+    return statusSummaryData.filter((item) => item.count > 0);
+  }, [statusSummaryData]);
+
+  // Handle refresh
+  const handleRefresh = useCallback(() => {
+    refetchWOs();
+    refetchSummary();
+    refetchMetrics();
+  }, [refetchWOs, refetchSummary, refetchMetrics]);
+
+  // Format date
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("id-ID", {
       day: "2-digit",
@@ -113,25 +123,23 @@ export function WorkOrderListPage() {
     });
   };
 
-  const calculateProgress = (wo: WorkOrder): number => {
-    if (wo.steps.length === 0) return 0;
+  // Calculate progress
+  const calculateProgress = useCallback((wo: WorkOrder): number => {
+    if (!wo.steps || wo.steps.length === 0) return 0;
 
     const completedSteps = wo.steps.filter(
-      (step) => step.status === "Done"
+      (step) => step.status === "completed"
     ).length;
     const inProgressSteps = wo.steps.filter(
-      (step) => step.status === "In Progress"
+      (step) => step.status === "in_progress"
     ).length;
 
     return Math.round(
       ((completedSteps + inProgressSteps * 0.5) / wo.steps.length) * 100
     );
-  };
+  }, []);
 
-  const handleRowClick = (woId: string) => {
-    navigate(`/production/${woId}`);
-  };
-
+  // Days remaining
   const getDaysRemaining = (targetDate: string): number => {
     const target = new Date(targetDate);
     const now = new Date();
@@ -149,10 +157,22 @@ export function WorkOrderListPage() {
             Manage production work orders, track progress, and QC
           </p>
         </div>
-        <Button onClick={() => navigate("/production/create")} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create WO
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isFetching}
+            className="gap-2"
+          >
+            <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button onClick={() => navigate("/production/create")} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create WO
+          </Button>
+        </div>
       </div>
 
       {/* Metrics */}
@@ -192,7 +212,7 @@ export function WorkOrderListPage() {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">QC Pending</p>
-                  <p className="text-xl font-semibold text-slate-900">{metrics.qcPendingWOs}</p>
+                  <p className="text-xl font-semibold text-slate-900">{metrics.inProgressWOs}</p>
                 </div>
               </div>
             </CardContent>
@@ -231,7 +251,7 @@ export function WorkOrderListPage() {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">QC Pass Rate</p>
-                  <p className="text-xl font-semibold text-slate-900">{metrics.qcFirstPassRate}%</p>
+                  <p className="text-xl font-semibold text-slate-900">{metrics.qcPassRate}%</p>
                 </div>
               </div>
             </CardContent>
@@ -257,10 +277,10 @@ export function WorkOrderListPage() {
                 <div
                   className={cn(
                     "p-1.5 rounded",
-                    woStatusColors[item.status].bg
+                    woStatusColors[item.status]?.bg
                   )}
                 >
-                  {getStatusIcon(item.status)}
+                  {statusIcons[item.status]}
                 </div>
                 <div>
                   <div className="text-lg font-bold text-slate-900">{item.count}</div>
@@ -331,14 +351,14 @@ export function WorkOrderListPage() {
               <TableBody>
                 {wos.map((wo) => {
                   const progress = calculateProgress(wo);
-                  const daysRemaining = getDaysRemaining(wo.targetDate);
+                  const daysRemaining = wo.targetDate ? getDaysRemaining(wo.targetDate) : 0;
                   const isOverdue = daysRemaining < 0 && wo.status !== WOStatus.COMPLETED && wo.status !== WOStatus.CANCELLED;
 
                   return (
                     <TableRow
                       key={wo.id}
                       className="cursor-pointer hover:bg-slate-50"
-                      onClick={() => handleRowClick(wo.id)}
+                      onClick={() => navigate(`/production/${wo.id}`)}
                     >
                       <TableCell className="font-medium">
                         {wo.woNumber}
@@ -352,19 +372,25 @@ export function WorkOrderListPage() {
                       </TableCell>
                       <TableCell>{wo.quantity}</TableCell>
                       <TableCell>
-                        <div className={cn("flex items-center gap-1", isOverdue && "text-red-600")}>
-                          <Calendar className="h-3.5 w-3.5" />
-                          {formatDate(wo.targetDate)}
-                        </div>
-                        {!isOverdue && daysRemaining >= 0 && daysRemaining <= 3 && wo.status !== WOStatus.COMPLETED && (
-                          <div className="text-xs text-amber-600">
-                            {daysRemaining} days left
-                          </div>
-                        )}
-                        {isOverdue && (
-                          <div className="text-xs text-red-600 font-medium">
-                            {Math.abs(daysRemaining)} days overdue
-                          </div>
+                        {wo.targetDate ? (
+                          <>
+                            <div className={cn("flex items-center gap-1", isOverdue && "text-red-600")}>
+                              <Calendar className="h-3.5 w-3.5" />
+                              {formatDate(wo.targetDate)}
+                            </div>
+                            {!isOverdue && daysRemaining >= 0 && daysRemaining <= 3 && wo.status !== WOStatus.COMPLETED && (
+                              <div className="text-xs text-amber-600">
+                                {daysRemaining} days left
+                              </div>
+                            )}
+                            {isOverdue && (
+                              <div className="text-xs text-red-600 font-medium">
+                                {Math.abs(daysRemaining)} days overdue
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-slate-400">-</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -378,13 +404,13 @@ export function WorkOrderListPage() {
                           variant="outline"
                           className={cn(
                             "gap-1.5 font-medium",
-                            woStatusColors[wo.status].bg,
-                            woStatusColors[wo.status].text,
-                            woStatusColors[wo.status].border
+                            woStatusColors[wo.status ?? "draft"]?.bg,
+                            woStatusColors[wo.status ?? "draft"]?.text,
+                            woStatusColors[wo.status ?? "draft"]?.border
                           )}
                         >
-                          {getStatusIcon(wo.status)}
-                          {wo.status}
+                          {statusIcons[wo.status ?? WOStatus.DRAFT]}
+                          {wo.status ?? "draft"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
