@@ -14,9 +14,8 @@ directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# Environment variables (build-time)
-# For runtime secrets, use: wrangler secret put <NAME>
-# Or set in Cloudflare Dashboard: Workers > apex-design-system > Settings > Variables
+# Environment variables (runtime)
+# Set API_URL in Cloudflare Dashboard: Workers > apex-design-system > Settings > Variables
+# Or use wrangler secret put API_URL for sensitive values
 [vars]
-VITE_USE_MOCK_DATA = "false"
-VITE_API_URL = ""
+API_URL = "https://appex-erp-be-staging.itobsidianmuda.workers.dev"

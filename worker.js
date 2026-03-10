@@ -1,25 +1,95 @@
 /**
- * Worker entry point for serving static assets with environment variable support.
+ * Worker entry point for serving static assets with API proxy support.
  *
- * This Worker serves the built static assets (React SPA) and enables
- * environment variables and secrets in the Cloudflare Dashboard.
+ * This Worker:
+ * 1. Proxies /api/* requests to the backend API server
+ * 2. Serves static assets (React SPA) for all other requests
  *
- * Routing:
- * - Static assets (HTML, CSS, JS) are served automatically
- * - All other requests fall through to this Worker
- * - SPA routing: non-asset requests return index.html
+ * Configuration:
+ * - Set API_URL in Cloudflare Dashboard: Workers > apex-design-system > Settings > Variables
+ * - For staging: API_URL = "https://appex-erp-be-staging.itobsidianmuda.workers.dev"
+ * - For production: API_URL = "https://appex-erp-be-production.itobsidianmuda.workers.dev"
  */
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Example: Add API routes here if needed
-    // if (url.pathname.startsWith("/api/")) {
-    //   return handleAPI(request, env);
-    // }
+    // Proxy API requests to backend
+    if (url.pathname.startsWith("/api/")) {
+      return proxyAPI(request, env, url);
+    }
 
     // Serve static assets via the ASSETS binding
     // This handles SPA routing automatically (not_found_handling: "single-page-application")
     return env.ASSETS.fetch(request);
   },
 };
+
+/**
+ * Proxy API requests to the backend server
+ */
+async function proxyAPI(request, env, url) {
+  // Handle CORS preflight requests
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": url.origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
+
+  // Get backend URL from environment variable (set in Cloudflare Dashboard)
+  const apiBaseUrl = env.API_URL || "https://appex-erp-be-staging.itobsidianmuda.workers.dev";
+
+  // Construct target URL
+  const targetUrl = new URL(url.pathname + url.search, apiBaseUrl);
+
+  // Clone request headers and forward them
+  const headers = new Headers(request.headers);
+  headers.set("Host", targetUrl.host);
+
+  // Create proxied request
+  const proxiedRequest = new Request(targetUrl, {
+    method: request.method,
+    headers: headers,
+    body: request.body,
+    redirect: "manual",
+  });
+
+  try {
+    // Forward request to backend
+    const response = await fetch(proxiedRequest);
+
+    // Clone response to modify headers
+    const modifiedResponse = new Response(response.body, response);
+
+    // Copy Set-Cookie headers and modify for cross-origin
+    const setCookie = response.headers.get("Set-Cookie");
+    if (setCookie) {
+      // Remove Secure flag and adjust SameSite for development
+      const modifiedCookie = setCookie
+        .replace(/;\s*Secure/gi, "")
+        .replace(/;\s*SameSite=Strict/gi, "; SameSite=Lax");
+      modifiedResponse.headers.set("Set-Cookie", modifiedCookie);
+    }
+
+    // Add CORS headers if needed
+    modifiedResponse.headers.set("Access-Control-Allow-Origin", url.origin);
+    modifiedResponse.headers.set("Access-Control-Allow-Credentials", "true");
+    modifiedResponse.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+    modifiedResponse.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    return modifiedResponse;
+  } catch (error) {
+    console.error("API proxy error:", error);
+    return new Response(JSON.stringify({ error: "API proxy failed", message: error.message }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
