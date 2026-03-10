@@ -1,0 +1,22 @@
+# Cloudflare Pages Configuration
+# Configures the ERP Dashboard as a Cloudflare Pages project
+# with environment variables available at build time
+
+name = "erp-dashboard"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "dist"
+
+[vars]
+# Build-time environment variables
+# Actual values are overridden in Cloudflare Pages dashboard:
+# Settings → Environment variables → Add variable
+VITE_USE_MOCK_DATA = "false"
+VITE_API_URL = ""
+
+[env.production.vars]
+VITE_USE_MOCK_DATA = "false"
+VITE_API_URL = ""
+
+[env.preview.vars]
+VITE_USE_MOCK_DATA = "false"
+VITE_API_URL = ""
