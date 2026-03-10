@@ -89,7 +89,7 @@ export function BoMFormPage() {
         setAvailableProducts(productsData.filter((p) => p.id !== productId));
 
         if (isEdit && id) {
-          const bom = await bomService.getBoMById(id);
+          const bom = await bomService.getBoMById(id) ?? await bomService.getBoMByProduct(productId!);
           if (bom) {
             setFormData({
               version: String(bom.version ?? ""),
@@ -101,7 +101,7 @@ export function BoMFormPage() {
               effectiveDate: bom.effectiveDate ? bom.effectiveDate.split("T")[0] : new Date().toISOString().split("T")[0],
             });
             setComponents(
-              (bom.components ?? bom.items ?? []).map((c) => ({
+              (bom.components ?? bom.items ?? []).map((c: any) => ({
                 id: c.id ?? `temp_${Date.now()}`,
                 productId: c.productId ?? c.materialId ?? "",
                 quantity: c.quantity ?? c.quantityRequired ?? 0,

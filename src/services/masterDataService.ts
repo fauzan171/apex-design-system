@@ -141,6 +141,19 @@ export const productService = {
   },
 
   /**
+   * Get product statistics for stat cards
+   * GET /products/summary
+   */
+  getProductStats: async (): Promise<{ total: number; active: number; lowStock: number; [key: string]: any }> => {
+    try {
+      const response = await apiClient.get<any>("/products/summary");
+      return response.data || { total: 0, active: 0, lowStock: 0 };
+    } catch {
+      return { total: 0, active: 0, lowStock: 0 };
+    }
+  },
+
+  /**
    * Import products from CSV/Excel
    * POST /products/import (multipart/form-data)
    */
@@ -211,9 +224,19 @@ export const bomService = {
 
   /**
    * Create a BoM for a product
-   * POST /products/{productId}/bom  (or via POST /boms with product_id)
+   * POST /products/{productId}/bom
+   * Supports: createBoM(productId, data) or createBoM(data) when data.productId is set
    */
-  createBoM: async (productId: string, data: CreateBoMRequest): Promise<BoM> => {
+  createBoM: async (productIdOrData: string | CreateBoMRequest, dataArg?: CreateBoMRequest): Promise<BoM> => {
+    let productId: string;
+    let data: CreateBoMRequest;
+    if (typeof productIdOrData === "string") {
+      productId = productIdOrData;
+      data = dataArg!;
+    } else {
+      productId = productIdOrData.productId!;
+      data = productIdOrData;
+    }
     const response = await apiClient.post<BoM>(`/products/${productId}/bom`, data);
     if (!response.data) throw new Error("Failed to create BoM");
     return response.data;
@@ -294,6 +317,54 @@ export const bomService = {
    */
   removeBoMItem: async (productId: string, itemId: string): Promise<void> => {
     await apiClient.delete(`/products/${productId}/bom/items/${itemId}`);
+  },
+
+  /**
+   * Get BoM by BOM ID (via /boms/{id})
+   */
+  getBoMById: async (bomId: string): Promise<BoM | null> => {
+    const response = await apiClient.get<BoM>(`/boms/${bomId}`);
+    return response.data || null;
+  },
+
+  /**
+   * Get the default (active) BoM for a product
+   */
+  getDefaultBoM: async (productId: string): Promise<BoM | null> => {
+    const response = await apiClient.get<BoM>(`/products/${productId}/bom`);
+    return response.data || null;
+  },
+
+  /**
+   * Activate a BoM (set status → active)
+   * PATCH /products/{productId}/bom/status  or  PATCH /boms/{id}/status
+   */
+  activateBoM: async (bomId: string): Promise<BoM> => {
+    // Try via boms/{id}/status first (OpenAPI has this)
+    const response = await apiClient.patch<BoM>(`/boms/${bomId}/status`, { status: "active" });
+    if (!response.data) throw new Error("Failed to activate BoM");
+    return response.data;
+  },
+
+  /**
+   * Mark a BoM as obsolete
+   */
+  obsoleteBoM: async (bomId: string): Promise<BoM> => {
+    const response = await apiClient.patch<BoM>(`/boms/${bomId}/status`, { status: "obsolete" });
+    if (!response.data) throw new Error("Failed to obsolete BoM");
+    return response.data;
+  },
+
+  /**
+   * Get BoM statistics
+   */
+  getBoMStats: async (): Promise<{ total: number; active: number; draft: number; inactive: number; obsolete: number }> => {
+    try {
+      const response = await apiClient.get<any>("/boms/summary");
+      return response.data || { total: 0, active: 0, draft: 0, inactive: 0, obsolete: 0 };
+    } catch {
+      return { total: 0, active: 0, draft: 0, inactive: 0, obsolete: 0 };
+    }
   },
 
   /**
