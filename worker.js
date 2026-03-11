@@ -1,14 +1,17 @@
 /**
- * Worker entry point for serving static assets with API proxy support.
+ * Worker entry point for API proxy.
  *
  * This Worker:
  * 1. Proxies /api/* requests to the backend API server
- * 2. Serves static assets (React SPA) for all other requests
+ * 2. Returns 404 for other requests (handled by SPA fallback via not_found_handling)
  *
  * Configuration:
  * - Set API_URL in Cloudflare Dashboard: Workers > apex-design-system > Settings > Variables
  * - For staging: API_URL = "https://appex-erp-be-staging.itobsidianmuda.workers.dev"
  * - For production: API_URL = "https://appex-erp-be-production.itobsidianmuda.workers.dev"
+ *
+ * Note: This worker only handles /api/* routes via run_worker_first configuration.
+ * All other routes are served by static assets with SPA fallback.
  */
 export default {
   async fetch(request, env, ctx) {
@@ -19,9 +22,8 @@ export default {
       return proxyAPI(request, env, url);
     }
 
-    // Serve static assets via the ASSETS binding
-    // This handles SPA routing automatically (not_found_handling: "single-page-application")
-    return env.ASSETS.fetch(request);
+    // Return 404 for non-API routes - SPA fallback will handle this
+    return new Response(null, { status: 404 });
   },
 };
 
