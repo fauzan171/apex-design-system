@@ -6,7 +6,13 @@ import type { IncomingMessage, ServerResponse } from "http"
 import { cloudflare } from "@cloudflare/vite-plugin";
 
 export default defineConfig({
-  plugins: [react(), cloudflare()],
+  plugins: [
+    react(),
+    cloudflare({
+      // The assets configuration is read from wrangler.toml
+      // This ensures run_worker_first, binding, and not_found_handling are applied
+    }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
